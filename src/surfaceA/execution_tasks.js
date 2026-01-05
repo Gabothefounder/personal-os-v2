@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-const EXECUTION_GUARD = true;
+const EXECUTION_GUARD = false;
 
 // Execution — Action Without Meaning
 
@@ -18,70 +18,79 @@ const EXECUTION_GUARD = true;
  * - Do NOT create DECIDED items
  * - Do NOT judge progress
  * - Do NOT escalate failures
+ * - No triggers
+ * - No calls to Surface A, DERIVED, or DECIDED
+ * - No scheduling logic
+ * - No Gemini
  ************************************************************/
 
 // ================== TAB NAME ==================
 const EXECUTION_TAB_TASKS = 'EXECUTION_TASKS';
 
-// ================== CONSTANTS ==================
+// ================== STATUS VALUES ==================
 const STATUS_OPEN = 'open';
 const STATUS_DONE = 'done';
+const STATUS_CANCELED = 'canceled';
 
 // ================== INITIALIZATION ==================
-function initializeExecutionTasks() {
+function initExecutionSheet() {
   if (EXECUTION_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
   const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
   
-  // Check if already initialized
+  // Check if sheet is empty (no data rows)
   const data = sheet.getDataRange().getValues();
-  if (data.length > 0 && data[0][0] === 'task_id') {
-    Logger.log('EXECUTION_TASKS already initialized');
+  if (data.length > 0) {
+    // Sheet has data, do not write headers
+    Logger.log('EXECUTION_TASKS sheet exists and has data');
     return;
   }
 
-  // Write header
+  // Write headers only if empty
   const header = [
     'task_id',
     'title',
+    'notes',
     'status',
-    'linked_decided_id',
     'created_at',
-    'completed_at'
+    'completed_at',
+    'due_date',
+    'decided_id'
   ];
 
-  sheet.clearContents();
   sheet.getRange(1, 1, 1, header.length).setValues([header]);
   
-  Logger.log('EXECUTION_TASKS initialized');
+  Logger.log('EXECUTION_TASKS sheet initialized with headers');
 }
 
 // ================== TASK OPERATIONS ==================
-function createTask(title, linkedDecidedId) {
+function createTask(input) {
   if (EXECUTION_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
-  if (!title || !title.trim()) {
+  
+  if (!input || !input.title || !input.title.trim()) {
     throw new Error('Title is required');
   }
 
   const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
-  initializeExecutionTasks();
+  initExecutionSheet();
 
   // Generate ID
   const taskId = generateTaskId();
-
   const now = new Date();
 
-  // Append row
+  // Append row - no inference, no defaults beyond required fields
   const row = [
     taskId,
-    title.trim(),
+    String(input.title).trim(),
+    input.notes ? String(input.notes).trim() : '',
     STATUS_OPEN,
-    linkedDecidedId ? String(linkedDecidedId).trim() : '',
     now,
-    '' // completed_at empty for open tasks
+    '', // completed_at empty for open tasks
+    input.due_date || '',
+    input.decided_id ? String(input.decided_id).trim() : ''
   ];
 
   sheet.appendRow(row);
@@ -90,7 +99,7 @@ function createTask(title, linkedDecidedId) {
   return taskId;
 }
 
-function completeTask(taskId) {
+function completeTask(task_id) {
   if (EXECUTION_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
@@ -107,36 +116,34 @@ function completeTask(taskId) {
   const statusIdx = headerRow.indexOf('status');
   const completedAtIdx = headerRow.indexOf('completed_at');
 
-  if (idIdx === -1 || statusIdx === -1) {
+  if (idIdx === -1 || statusIdx === -1 || completedAtIdx === -1) {
     throw new Error('Invalid EXECUTION_TASKS sheet structure');
   }
 
   // Find the task
   let rowIdx = -1;
   for (let i = 1; i < data.length; i++) {
-    if (data[i][idIdx] === taskId) {
+    if (String(data[i][idIdx] || '').trim() === String(task_id).trim()) {
       rowIdx = i + 1; // +1 because sheet rows are 1-indexed
       break;
     }
   }
 
   if (rowIdx === -1) {
-    throw new Error('Task not found: ' + taskId);
+    throw new Error('Task not found: ' + task_id);
   }
 
   // Update status
   sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_DONE);
 
   // Set completed_at
-  if (completedAtIdx >= 0) {
-    sheet.getRange(rowIdx, completedAtIdx + 1).setValue(new Date());
-  }
+  sheet.getRange(rowIdx, completedAtIdx + 1).setValue(new Date());
 
-  Logger.log('Completed task: ' + taskId);
+  Logger.log('Completed task: ' + task_id);
   return true;
 }
 
-function deleteTask(taskId) {
+function cancelTask(task_id) {
   if (EXECUTION_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
@@ -150,33 +157,38 @@ function deleteTask(taskId) {
   // Find header indices
   const headerRow = data[0];
   const idIdx = headerRow.indexOf('task_id');
+  const statusIdx = headerRow.indexOf('status');
+  const completedAtIdx = headerRow.indexOf('completed_at');
 
-  if (idIdx === -1) {
+  if (idIdx === -1 || statusIdx === -1 || completedAtIdx === -1) {
     throw new Error('Invalid EXECUTION_TASKS sheet structure');
   }
 
   // Find the task
   let rowIdx = -1;
   for (let i = 1; i < data.length; i++) {
-    if (data[i][idIdx] === taskId) {
+    if (String(data[i][idIdx] || '').trim() === String(task_id).trim()) {
       rowIdx = i + 1; // +1 because sheet rows are 1-indexed
       break;
     }
   }
 
   if (rowIdx === -1) {
-    throw new Error('Task not found: ' + taskId);
+    throw new Error('Task not found: ' + task_id);
   }
 
-  // Delete the row
-  sheet.deleteRow(rowIdx);
+  // Update status
+  sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_CANCELED);
 
-  Logger.log('Deleted task: ' + taskId);
+  // Set completed_at
+  sheet.getRange(rowIdx, completedAtIdx + 1).setValue(new Date());
+
+  Logger.log('Canceled task: ' + task_id);
   return true;
 }
 
 // ================== QUERY FUNCTIONS ==================
-function getTasks(status, linkedDecidedId) {
+function listOpenTasks() {
   const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
   const data = sheet.getDataRange().getValues();
 
@@ -188,47 +200,93 @@ function getTasks(status, linkedDecidedId) {
   const headerRow = data[0];
   const idIdx = headerRow.indexOf('task_id');
   const titleIdx = headerRow.indexOf('title');
+  const notesIdx = headerRow.indexOf('notes');
   const statusIdx = headerRow.indexOf('status');
-  const linkedIdx = headerRow.indexOf('linked_decided_id');
   const createdIdx = headerRow.indexOf('created_at');
   const completedIdx = headerRow.indexOf('completed_at');
+  const dueDateIdx = headerRow.indexOf('due_date');
+  const decidedIdIdx = headerRow.indexOf('decided_id');
+
+  if (idIdx === -1 || statusIdx === -1) {
+    return [];
+  }
 
   const tasks = [];
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    const taskStatus = row[statusIdx];
-    const taskLinkedId = linkedIdx >= 0 ? String(row[linkedIdx] || '').trim() : '';
+    const taskStatus = String(row[statusIdx] || '').trim();
 
-    // Filter by status if provided
-    if (status && taskStatus !== status) {
-      continue;
-    }
-
-    // Filter by linked_decided_id if provided
-    if (linkedDecidedId && taskLinkedId !== linkedDecidedId) {
+    // Only return tasks where status = "open"
+    if (taskStatus !== STATUS_OPEN) {
       continue;
     }
 
     tasks.push({
       task_id: row[idIdx],
-      title: row[titleIdx],
+      title: titleIdx >= 0 ? row[titleIdx] : '',
+      notes: notesIdx >= 0 ? row[notesIdx] : '',
       status: taskStatus,
-      linked_decided_id: taskLinkedId || null,
-      created_at: row[createdIdx],
-      completed_at: row[completedIdx] || null
+      created_at: createdIdx >= 0 ? row[createdIdx] : null,
+      completed_at: completedIdx >= 0 ? row[completedIdx] : null,
+      due_date: dueDateIdx >= 0 ? row[dueDateIdx] : null,
+      decided_id: decidedIdIdx >= 0 ? (row[decidedIdIdx] ? String(row[decidedIdIdx]).trim() : '') : ''
     });
   }
 
   return tasks;
 }
 
-function getOpenTasks(linkedDecidedId) {
-  return getTasks(STATUS_OPEN, linkedDecidedId);
-}
+// ================== TEST ENTRY POINT ==================
+function runExecutionSelfTest() {
+  if (EXECUTION_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  Logger.log('--- EXECUTION SELF TEST START ---');
 
-function getDoneTasks(linkedDecidedId) {
-  return getTasks(STATUS_DONE, linkedDecidedId);
+  initExecutionSheet();
+
+  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    Logger.log('No tasks found. Counts: open=0, done=0, canceled=0');
+    Logger.log('--- EXECUTION SELF TEST END ---');
+    return;
+  }
+
+  // Find header indices
+  const headerRow = data[0];
+  const statusIdx = headerRow.indexOf('status');
+
+  if (statusIdx === -1) {
+    Logger.log('Invalid sheet structure');
+    Logger.log('--- EXECUTION SELF TEST END ---');
+    return;
+  }
+
+  // Count by status
+  let openCount = 0;
+  let doneCount = 0;
+  let canceledCount = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    const status = String(data[i][statusIdx] || '').trim();
+    if (status === STATUS_OPEN) {
+      openCount++;
+    } else if (status === STATUS_DONE) {
+      doneCount++;
+    } else if (status === STATUS_CANCELED) {
+      canceledCount++;
+    }
+  }
+
+  Logger.log('Task counts by status:');
+  Logger.log('  open: ' + openCount);
+  Logger.log('  done: ' + doneCount);
+  Logger.log('  canceled: ' + canceledCount);
+
+  Logger.log('--- EXECUTION SELF TEST END ---');
 }
 
 // ================== HELPERS ==================

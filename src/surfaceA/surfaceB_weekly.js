@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-const SURFACEB_WEEKLY_GUARD = true;
+const SURFACEB_WEEKLY_GUARD = false;
 
 // Surface B — Weekly Read Model
 
@@ -8,49 +8,59 @@ const SURFACEB_WEEKLY_GUARD = true;
  *
  * Purpose:
  * - Generate weekly brief from stable patterns and commitments
- * - Read-only projection layer
+ * - Read-only eligibility reporting
  * - No importance framing, no auto-entry into DECIDE MODE
  *
  * Rules:
  * - READ ONLY
+ * - NO writes to any sheet
+ * - NO Gemini
  * - No auto-entry into DECIDE MODE
  * - No importance framing
- * - Allowed language: "A recurrence has remained stable…", "Confirmed objective…"
+ * - No invitations or decisions
+ * - Allowed language: "A recurrence remained stable…"
  * - Forbidden: "This seems important", "You should"
  ************************************************************/
 
 // ================== TAB NAMES ==================
 const SURFACEB_WEEKLY_TAB_DERIVED = 'DERIVED_SIGNALS';
-const SURFACEB_WEEKLY_TAB_DECIDED = 'DECIDED';
-const SURFACEB_WEEKLY_TAB_WEEKLY_VIEW = 'WEEKLY_VIEW';
+
+// ================== ELIGIBILITY THRESHOLD ==================
+// Minimum ratio of count/possible for a signal to be eligible for weekly review
+const WEEKLY_ELIGIBILITY_THRESHOLD = 0.4; // 40% recurrence rate
 
 // ================== ENTRY POINT ==================
-function generateWeeklyBrief() {
+function runSurfaceBWeeklyOnce() {
   if (SURFACEB_WEEKLY_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
   Logger.log('--- SURFACE B WEEKLY BRIEF START ---');
 
-  const stableSignals = readStableDerivedSignals();
-  const decidedItems = readSpokenDecidedItems();
-
-  const brief = formatWeeklyBrief(stableSignals, decidedItems);
-
-  if (brief.length === 0) {
-    Logger.log('No content to display. Silence is valid output.');
-    writeWeeklyView([]);
+  const derivedSignals = readDerivedSignals();
+  
+  if (!derivedSignals || derivedSignals.length === 0) {
+    Logger.log('No DERIVED_SIGNALS data available. Silence is valid output.');
+    Logger.log('--- SURFACE B WEEKLY BRIEF END ---');
     return;
   }
 
-  writeWeeklyView(brief);
+  const eligibleSignals = selectEligibleSignals(derivedSignals);
+  const decidedItems = readConfirmedSpeakable();
+
+  const brief = composeWeeklyBrief(eligibleSignals, decidedItems);
+
+  Logger.log('=== WEEKLY BRIEF ===');
+  Logger.log(brief);
+  Logger.log('=== END WEEKLY BRIEF ===');
+
   Logger.log('--- SURFACE B WEEKLY BRIEF END ---');
 }
 
 // ================== READ SOURCES ==================
-function readStableDerivedSignals() {
+function readDerivedSignals() {
   const sheet = getSheet(SURFACEB_WEEKLY_TAB_DERIVED);
   if (!sheet) {
-    return [];
+    return null;
   }
   const data = sheet.getDataRange().getValues();
 
@@ -61,165 +71,85 @@ function readStableDerivedSignals() {
   // Find header indices
   const headerRow = data[0];
   const fieldIdx = headerRow.indexOf('field');
-  const phraseIdx = headerRow.indexOf('phrase');
+  const patternKeyIdx = headerRow.indexOf('pattern_key');
   const countIdx = headerRow.indexOf('count');
+  const possibleIdx = headerRow.indexOf('possible');
   const windowIdx = headerRow.indexOf('window');
-  const datesIdx = headerRow.indexOf('dates');
 
-  if (fieldIdx === -1 || windowIdx === -1) {
+  if (fieldIdx === -1 || patternKeyIdx === -1 || windowIdx === -1) {
     return [];
   }
 
-  const stableSignals = [];
+  const signals = [];
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    const window = String(row[windowIdx] || '').trim();
-    const field = String(row[fieldIdx] || '').trim();
-    const phrase = String(row[phraseIdx] || '').trim();
+    const field = row[fieldIdx];
+    const patternKey = row[patternKeyIdx];
     const count = row[countIdx] ? Number(row[countIdx]) : 0;
-    const dates = row[datesIdx] ? String(row[datesIdx] || '').trim() : '';
+    const possible = row[possibleIdx] ? Number(row[possibleIdx]) : 0;
+    const window = String(row[windowIdx] || '').trim();
 
-    // Filter for signals with window ≥7 days
-    const windowDays = extractWindowDays(window);
-    if (windowDays >= 7 && field && phrase) {
-      stableSignals.push({
-        field: field,
-        phrase: phrase,
+    if (field && patternKey && window) {
+      signals.push({
+        field: String(field).trim(),
+        pattern_key: String(patternKey).trim(),
         count: count,
-        window: window,
-        dates: dates
+        possible: possible,
+        window: window
       });
     }
   }
 
-  return stableSignals;
+  return signals;
 }
 
-function readSpokenDecidedItems() {
-  const sheet = getSheet(SURFACEB_WEEKLY_TAB_DECIDED);
-  if (!sheet) {
-    return [];
-  }
-  const data = sheet.getDataRange().getValues();
-
-  if (data.length <= 1) {
-    return [];
-  }
-
-  // Find header indices
-  const headerRow = data[0];
-  const idIdx = headerRow.indexOf('decided_id');
-  const typeIdx = headerRow.indexOf('type');
-  const statusIdx = headerRow.indexOf('status');
-  const titleIdx = headerRow.indexOf('title');
-  const bodyIdx = headerRow.indexOf('body');
-  const usageIdx = headerRow.indexOf('allowed_surface_usage');
-
-  if (statusIdx === -1 || usageIdx === -1) {
-    return [];
-  }
-
-  const items = [];
-
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const status = String(row[statusIdx] || '').trim();
-    const usage = String(row[usageIdx] || '').trim();
-
-    // Only confirmed items marked can_be_spoken
-    if (status === 'confirmed' && usage === 'can_be_spoken') {
-      items.push({
-        decided_id: idIdx >= 0 ? String(row[idIdx] || '').trim() : '',
-        type: typeIdx >= 0 ? String(row[typeIdx] || '').trim() : '',
-        title: titleIdx >= 0 ? String(row[titleIdx] || '').trim() : '',
-        body: bodyIdx >= 0 ? String(row[bodyIdx] || '').trim() : ''
-      });
+function readConfirmedSpeakable() {
+  try {
+    // Call listConfirmedSpeakable from decided_ledger.js
+    if (typeof listConfirmedSpeakable === 'function') {
+      return listConfirmedSpeakable();
     }
+  } catch (e) {
+    Logger.log('Could not read DECIDED items: ' + e.message);
   }
-
-  return items;
+  return [];
 }
 
-// ================== FORMAT BRIEF ==================
-function formatWeeklyBrief(stableSignals, decidedItems) {
-  const lines = [];
+// ================== SELECT ELIGIBLE SIGNALS ==================
+function selectEligibleSignals(signals) {
+  const eligible = [];
 
-  // Stable recurrences
-  if (stableSignals.length > 0) {
-    lines.push('STABLE RECURRENCES');
-    lines.push('');
+  for (const signal of signals) {
+    const windowDays = extractWindowDays(signal.window);
     
-    for (const signal of stableSignals) {
-      lines.push('A recurrence has remained stable:');
-      lines.push(signal.phrase);
-      lines.push('Appeared ' + signal.count + ' times over ' + signal.window);
-      if (signal.dates) {
-        lines.push('Dates: ' + signal.dates);
-      }
-      lines.push('');
+    // Window must be 7-14 days
+    if (windowDays < 7 || windowDays > 14) {
+      continue;
     }
-  }
 
-  // Confirmed commitments
-  if (decidedItems.length > 0) {
-    lines.push('CONFIRMED COMMITMENTS');
-    lines.push('');
+    // Count/possible must meet threshold
+    if (signal.possible === 0) {
+      continue;
+    }
     
-    for (const item of decidedItems) {
-      if (item.type === 'Objective') {
-        lines.push('Confirmed objective:');
-      } else if (item.type === 'Principle') {
-        lines.push('Confirmed principle:');
-      } else if (item.type === 'Project') {
-        lines.push('Confirmed project:');
-      } else if (item.type === 'Constraint') {
-        lines.push('Confirmed constraint:');
-      } else if (item.type === 'Decision') {
-        lines.push('Confirmed decision:');
-      } else {
-        lines.push('Confirmed ' + item.type.toLowerCase() + ':');
-      }
-      
-      if (item.title) {
-        lines.push(item.title);
-      }
-      if (item.body) {
-        lines.push(item.body);
-      }
-      lines.push('');
+    const ratio = signal.count / signal.possible;
+    if (ratio < WEEKLY_ELIGIBILITY_THRESHOLD) {
+      continue;
     }
+
+    eligible.push(signal);
   }
 
-  // Remove trailing empty lines
-  while (lines.length > 0 && lines[lines.length - 1] === '') {
-    lines.pop();
-  }
-
-  return lines;
+  return eligible;
 }
 
-// ================== WRITE OUTPUT ==================
-function writeWeeklyView(briefLines) {
-  const sheet = getOrCreateSheet(SURFACEB_WEEKLY_TAB_WEEKLY_VIEW);
-  sheet.clearContents();
-
-  if (briefLines.length === 0) {
-    return;
-  }
-
-  // Write as single column
-  const rows = briefLines.map(line => [line]);
-  sheet.getRange(1, 1, rows.length, 1).setValues(rows);
-}
-
-// ================== HELPERS ==================
 function extractWindowDays(windowStr) {
   if (!windowStr) {
     return 0;
   }
   
-  // Extract number from strings like "5 days", "14 days"
+  // Extract number from strings like "5 days", "14 days", or just "14"
   const match = windowStr.match(/(\d+)/);
   if (match) {
     return parseInt(match[1], 10);
@@ -228,19 +158,44 @@ function extractWindowDays(windowStr) {
   return 0;
 }
 
+// ================== COMPOSE BRIEF ==================
+function composeWeeklyBrief(eligibleSignals, decidedItems) {
+  const lines = [];
+
+  // Eligible recurrences section
+  if (eligibleSignals.length > 0) {
+    for (const signal of eligibleSignals) {
+      const windowDays = extractWindowDays(signal.window);
+      lines.push('A recurrence remained stable over the past ' + windowDays + ' days and is eligible for review.');
+      if (signal.field && signal.pattern_key) {
+        lines.push('Field: ' + signal.field + ', Pattern: ' + signal.pattern_key);
+      }
+      lines.push('');
+    }
+  } else {
+    lines.push('No recurrences eligible for weekly review.');
+    lines.push('');
+  }
+
+  // Optional: Confirmed commitments context heading
+  if (decidedItems.length > 0) {
+    lines.push('Confirmed Commitments');
+    for (const item of decidedItems) {
+      if (item.title) {
+        lines.push(item.title);
+      }
+      if (item.description) {
+        lines.push(item.description);
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+// ================== HELPERS ==================
 function getSheet(name) {
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(name);
-  return sheet;
-}
-
-function getOrCreateSheet(name) {
-  const ss = SpreadsheetApp.getActive();
-  let sheet = ss.getSheetByName(name);
-
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-  }
-
   return sheet;
 }

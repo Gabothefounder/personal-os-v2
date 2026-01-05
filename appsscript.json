@@ -1,0 +1,8 @@
+{
+  "timeZone": "America/Grand_Turk",
+  "dependencies": {
+    "enabledAdvancedServices": []
+  },
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8"
+}

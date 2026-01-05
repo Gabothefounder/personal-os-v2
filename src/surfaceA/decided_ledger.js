@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-const DECIDED_GUARD = true;
+const DECIDED_GUARD = false;
 
 // DECIDED — Human Commitment Ledger (Authoritative, Manual)
 
@@ -17,118 +17,105 @@ const DECIDED_GUARD = true;
  * - NO inference
  * - NO psychology
  * - NO escalation
+ * - NO triggers
+ * - NO writes outside DECIDED
+ * - NO calls to DERIVED or Surface A
  ************************************************************/
 
 // ================== TAB NAME ==================
 const DECIDED_TAB_DECIDED = 'DECIDED';
 
 // ================== CONSTANTS ==================
-const TYPE_PRINCIPLE = 'Principle';
-const TYPE_OBJECTIVE = 'Objective';
-const TYPE_PROJECT = 'Project';
-const TYPE_CONSTRAINT = 'Constraint';
-const TYPE_DECISION = 'Decision';
-
 const STATUS_PROPOSED = 'proposed';
 const STATUS_CONFIRMED = 'confirmed';
 const STATUS_DEFERRED = 'deferred';
 const STATUS_REJECTED = 'rejected';
-const STATUS_ARCHIVED = 'archived';
-const STATUS_SUPERSEDED = 'superseded';
+const STATUS_EXPIRED = 'expired';
+
+const SOURCE_MANUAL = 'manual';
+const SOURCE_DERIVED_REFERENCE = 'derived_reference';
+
+const USAGE_CAN_BE_SPOKEN = 'can_be_spoken';
+const USAGE_SILENT = 'silent';
 
 const REVERSIBILITY_REVERSIBLE = 'reversible';
 const REVERSIBILITY_IRREVERSIBLE = 'irreversible';
 
-const USAGE_PRIVATE_ONLY = 'private_only';
-const USAGE_CAN_BE_SPOKEN = 'can_be_spoken';
-
 // ================== INITIALIZATION ==================
-function initializeDecidedLedger() {
+function initDecidedSheet() {
   if (DECIDED_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
   const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
   
-  // Check if already initialized
+  // Check if sheet is empty
   const data = sheet.getDataRange().getValues();
   if (data.length > 0 && data[0][0] === 'decided_id') {
-    Logger.log('DECIDED ledger already initialized');
+    Logger.log('DECIDED sheet already initialized');
     return;
   }
 
-  // Write header
+  // Write headers ONLY if sheet is empty
   const header = [
     'decided_id',
-    'type',
-    'status',
+    'source',
     'title',
-    'body',
-    'reversibility',
+    'description',
+    'status',
+    'proposed_at',
+    'confirmed_at',
+    'deferred_until',
     'allowed_surface_usage',
-    'created_at',
-    'confirmed_at'
+    'reversibility',
+    'notes'
   ];
 
   sheet.clearContents();
   sheet.getRange(1, 1, 1, header.length).setValues([header]);
   
-  Logger.log('DECIDED ledger initialized');
+  Logger.log('DECIDED sheet initialized');
 }
 
-// ================== ADD PROPOSED ITEM ==================
-function proposeDecidedItem(type, title, body, reversibility, allowedSurfaceUsage) {
+// ================== CREATE PROPOSED ITEM ==================
+function createProposedDecidedItem(input) {
   if (DECIDED_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
-  // Validate type
-  const validTypes = [TYPE_PRINCIPLE, TYPE_OBJECTIVE, TYPE_PROJECT, TYPE_CONSTRAINT, TYPE_DECISION];
-  if (!validTypes.includes(type)) {
-    throw new Error('Invalid type: ' + type);
-  }
-
-  // Validate reversibility
-  if (reversibility !== REVERSIBILITY_REVERSIBLE && reversibility !== REVERSIBILITY_IRREVERSIBLE) {
-    throw new Error('Invalid reversibility: ' + reversibility);
-  }
-
-  // Validate allowed_surface_usage
-  if (allowedSurfaceUsage !== USAGE_PRIVATE_ONLY && allowedSurfaceUsage !== USAGE_CAN_BE_SPOKEN) {
-    throw new Error('Invalid allowed_surface_usage: ' + allowedSurfaceUsage);
-  }
 
   // Validate required fields
-  if (!title || !title.trim()) {
+  if (!input.title || !input.title.trim()) {
     throw new Error('Title is required');
   }
 
-  if (!body || !body.trim()) {
-    throw new Error('Body is required');
+  if (!input.description || !input.description.trim()) {
+    throw new Error('Description is required');
   }
 
   const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
-  initializeDecidedLedger();
+  initDecidedSheet();
 
   // Generate ID
   const decidedId = generateDecidedId();
-
   const now = new Date();
 
   // Append row
   const row = [
     decidedId,
-    type,
+    input.source || SOURCE_MANUAL,
+    input.title.trim(),
+    input.description.trim(),
     STATUS_PROPOSED,
-    title.trim(),
-    body.trim(),
-    reversibility,
-    allowedSurfaceUsage,
     now,
-    '' // confirmed_at empty for proposed
+    '', // confirmed_at blank for proposed
+    '', // deferred_until blank for proposed
+    input.allowed_surface_usage || USAGE_SILENT,
+    input.reversibility || REVERSIBILITY_REVERSIBLE,
+    input.notes || ''
   ];
 
   sheet.appendRow(row);
   
-  Logger.log('Proposed DECIDED item: ' + decidedId);
+  Logger.log('Created proposed DECIDED item: ' + decidedId);
   return decidedId;
 }
 
@@ -137,38 +124,6 @@ function confirmDecidedItem(decidedId) {
   if (DECIDED_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
-  return transitionDecidedItem(decidedId, STATUS_PROPOSED, STATUS_CONFIRMED);
-}
-
-function deferDecidedItem(decidedId) {
-  if (DECIDED_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
-  }
-  return transitionDecidedItem(decidedId, STATUS_PROPOSED, STATUS_DEFERRED);
-}
-
-function rejectDecidedItem(decidedId) {
-  if (DECIDED_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
-  }
-  return transitionDecidedItem(decidedId, STATUS_PROPOSED, STATUS_REJECTED);
-}
-
-function archiveDecidedItem(decidedId) {
-  if (DECIDED_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
-  }
-  return transitionDecidedItem(decidedId, STATUS_CONFIRMED, STATUS_ARCHIVED);
-}
-
-function supersedeDecidedItem(decidedId) {
-  if (DECIDED_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
-  }
-  return transitionDecidedItem(decidedId, STATUS_CONFIRMED, STATUS_SUPERSEDED);
-}
-
-function transitionDecidedItem(decidedId, fromStatus, toStatus) {
   const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
   const data = sheet.getDataRange().getValues();
 
@@ -176,7 +131,6 @@ function transitionDecidedItem(decidedId, fromStatus, toStatus) {
     throw new Error('No DECIDED items found');
   }
 
-  // Find header indices
   const headerRow = data[0];
   const idIdx = headerRow.indexOf('decided_id');
   const statusIdx = headerRow.indexOf('status');
@@ -190,7 +144,7 @@ function transitionDecidedItem(decidedId, fromStatus, toStatus) {
   let rowIdx = -1;
   for (let i = 1; i < data.length; i++) {
     if (data[i][idIdx] === decidedId) {
-      rowIdx = i + 1; // +1 because sheet rows are 1-indexed
+      rowIdx = i + 1;
       break;
     }
   }
@@ -201,24 +155,124 @@ function transitionDecidedItem(decidedId, fromStatus, toStatus) {
 
   // Check current status
   const currentStatus = data[rowIdx - 1][statusIdx];
-  if (currentStatus !== fromStatus) {
-    throw new Error('Invalid state transition: current status is ' + currentStatus + ', expected ' + fromStatus);
+  if (currentStatus !== STATUS_PROPOSED) {
+    throw new Error('Invalid state transition: current status is ' + currentStatus + ', expected ' + STATUS_PROPOSED);
   }
 
   // Update status
-  sheet.getRange(rowIdx, statusIdx + 1).setValue(toStatus);
+  sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_CONFIRMED);
 
-  // If confirming, set confirmed_at
-  if (toStatus === STATUS_CONFIRMED && confirmedAtIdx >= 0) {
+  // Set confirmed_at
+  if (confirmedAtIdx >= 0) {
     sheet.getRange(rowIdx, confirmedAtIdx + 1).setValue(new Date());
   }
 
-  Logger.log('Transitioned DECIDED item ' + decidedId + ' from ' + fromStatus + ' to ' + toStatus);
+  Logger.log('Confirmed DECIDED item: ' + decidedId);
+  return true;
+}
+
+function rejectDecidedItem(decidedId) {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    throw new Error('No DECIDED items found');
+  }
+
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('decided_id');
+  const statusIdx = headerRow.indexOf('status');
+  const notesIdx = headerRow.indexOf('notes');
+
+  if (idIdx === -1 || statusIdx === -1) {
+    throw new Error('Invalid DECIDED sheet structure');
+  }
+
+  // Find the item
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][idIdx] === decidedId) {
+      rowIdx = i + 1;
+      break;
+    }
+  }
+
+  if (rowIdx === -1) {
+    throw new Error('DECIDED item not found: ' + decidedId);
+  }
+
+  // Update status
+  sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_REJECTED);
+
+  // Record rejection date in notes if notes column exists
+  if (notesIdx >= 0) {
+    const currentNotes = data[rowIdx - 1][notesIdx] || '';
+    const rejectionNote = 'Rejected at ' + new Date().toISOString();
+    const updatedNotes = currentNotes ? currentNotes + '; ' + rejectionNote : rejectionNote;
+    sheet.getRange(rowIdx, notesIdx + 1).setValue(updatedNotes);
+  }
+
+  Logger.log('Rejected DECIDED item: ' + decidedId);
+  return true;
+}
+
+function deferDecidedItem(decidedId, untilDate) {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  if (!untilDate || !(untilDate instanceof Date)) {
+    throw new Error('until_date is required and must be a Date');
+  }
+
+  const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    throw new Error('No DECIDED items found');
+  }
+
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('decided_id');
+  const statusIdx = headerRow.indexOf('status');
+  const deferredUntilIdx = headerRow.indexOf('deferred_until');
+
+  if (idIdx === -1 || statusIdx === -1) {
+    throw new Error('Invalid DECIDED sheet structure');
+  }
+
+  // Find the item
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][idIdx] === decidedId) {
+      rowIdx = i + 1;
+      break;
+    }
+  }
+
+  if (rowIdx === -1) {
+    throw new Error('DECIDED item not found: ' + decidedId);
+  }
+
+  // Update status
+  sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_DEFERRED);
+
+  // Set deferred_until
+  if (deferredUntilIdx >= 0) {
+    sheet.getRange(rowIdx, deferredUntilIdx + 1).setValue(untilDate);
+  }
+
+  Logger.log('Deferred DECIDED item: ' + decidedId + ' until ' + untilDate);
   return true;
 }
 
 // ================== QUERY FUNCTIONS ==================
-function getDecidedItems(status, type) {
+function listConfirmedSpeakable() {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
   const data = sheet.getDataRange().getValues();
 
@@ -226,57 +280,89 @@ function getDecidedItems(status, type) {
     return [];
   }
 
-  // Find header indices
   const headerRow = data[0];
   const idIdx = headerRow.indexOf('decided_id');
-  const typeIdx = headerRow.indexOf('type');
   const statusIdx = headerRow.indexOf('status');
-  const titleIdx = headerRow.indexOf('title');
-  const bodyIdx = headerRow.indexOf('body');
-  const reversibilityIdx = headerRow.indexOf('reversibility');
   const usageIdx = headerRow.indexOf('allowed_surface_usage');
-  const createdIdx = headerRow.indexOf('created_at');
-  const confirmedIdx = headerRow.indexOf('confirmed_at');
+  const sourceIdx = headerRow.indexOf('source');
+  const titleIdx = headerRow.indexOf('title');
+  const descIdx = headerRow.indexOf('description');
+  const reversibilityIdx = headerRow.indexOf('reversibility');
+  const notesIdx = headerRow.indexOf('notes');
+  const proposedAtIdx = headerRow.indexOf('proposed_at');
+  const confirmedAtIdx = headerRow.indexOf('confirmed_at');
+  const deferredUntilIdx = headerRow.indexOf('deferred_until');
 
   const items = [];
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const itemStatus = row[statusIdx];
-    const itemType = row[typeIdx];
+    const itemUsage = row[usageIdx];
 
-    // Filter by status if provided
-    if (status && itemStatus !== status) {
-      continue;
-    }
-
-    // Filter by type if provided
-    if (type && itemType !== type) {
+    // Filter: status = confirmed AND allowed_surface_usage = can_be_spoken
+    if (itemStatus !== STATUS_CONFIRMED || itemUsage !== USAGE_CAN_BE_SPOKEN) {
       continue;
     }
 
     items.push({
       decided_id: row[idIdx],
-      type: itemType,
+      source: sourceIdx >= 0 ? row[sourceIdx] : '',
+      title: titleIdx >= 0 ? row[titleIdx] : '',
+      description: descIdx >= 0 ? row[descIdx] : '',
       status: itemStatus,
-      title: row[titleIdx],
-      body: row[bodyIdx],
-      reversibility: row[reversibilityIdx],
-      allowed_surface_usage: row[usageIdx],
-      created_at: row[createdIdx],
-      confirmed_at: row[confirmedIdx] || null
+      proposed_at: proposedAtIdx >= 0 ? row[proposedAtIdx] : null,
+      confirmed_at: confirmedAtIdx >= 0 ? row[confirmedAtIdx] : null,
+      deferred_until: deferredUntilIdx >= 0 ? row[deferredUntilIdx] : null,
+      allowed_surface_usage: itemUsage,
+      reversibility: reversibilityIdx >= 0 ? row[reversibilityIdx] : '',
+      notes: notesIdx >= 0 ? row[notesIdx] : ''
     });
   }
 
   return items;
 }
 
-function getConfirmedDecidedItems(type) {
-  return getDecidedItems(STATUS_CONFIRMED, type);
-}
+// ================== TEST ENTRY POINT ==================
+function runDecidedSelfTest() {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  Logger.log('--- DECIDED SELF TEST START ---');
 
-function getProposedDecidedItems() {
-  return getDecidedItems(STATUS_PROPOSED, null);
+  initDecidedSheet();
+
+  const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    Logger.log('No DECIDED items found');
+    Logger.log('--- DECIDED SELF TEST END ---');
+    return;
+  }
+
+  const headerRow = data[0];
+  const statusIdx = headerRow.indexOf('status');
+
+  if (statusIdx === -1) {
+    Logger.log('Invalid DECIDED sheet structure');
+    Logger.log('--- DECIDED SELF TEST END ---');
+    return;
+  }
+
+  // Count by status
+  const counts = {};
+  for (let i = 1; i < data.length; i++) {
+    const status = data[i][statusIdx];
+    counts[status] = (counts[status] || 0) + 1;
+  }
+
+  Logger.log('DECIDED items by status:');
+  for (const [status, count] of Object.entries(counts)) {
+    Logger.log('  ' + status + ': ' + count);
+  }
+
+  Logger.log('--- DECIDED SELF TEST END ---');
 }
 
 // ================== HELPERS ==================

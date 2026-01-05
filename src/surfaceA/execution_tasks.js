@@ -237,6 +237,56 @@ function listOpenTasks() {
   return tasks;
 }
 
+function listTasksByDecided(decided_id) {
+  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    return [];
+  }
+  
+  // Find header indices
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('task_id');
+  const titleIdx = headerRow.indexOf('title');
+  const notesIdx = headerRow.indexOf('notes');
+  const statusIdx = headerRow.indexOf('status');
+  const createdIdx = headerRow.indexOf('created_at');
+  const completedIdx = headerRow.indexOf('completed_at');
+  const dueDateIdx = headerRow.indexOf('due_date');
+  const decidedIdIdx = headerRow.indexOf('decided_id');
+  
+  if (idIdx === -1 || decidedIdIdx === -1) {
+    return [];
+  }
+  
+  const tasks = [];
+  const decidedIdStr = String(decided_id).trim();
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const taskDecidedId = row[decidedIdIdx] ? String(row[decidedIdIdx]).trim() : '';
+    
+    // Filter by decided_id
+    if (taskDecidedId !== decidedIdStr) {
+      continue;
+    }
+    
+    tasks.push({
+      task_id: row[idIdx],
+      title: titleIdx >= 0 ? row[titleIdx] : '',
+      notes: notesIdx >= 0 ? row[notesIdx] : '',
+      status: statusIdx >= 0 ? String(row[statusIdx] || '').trim() : '',
+      created_at: createdIdx >= 0 ? row[createdIdx] : null,
+      completed_at: completedIdx >= 0 ? row[completedIdx] : null,
+      due_date: dueDateIdx >= 0 ? row[dueDateIdx] : null,
+      decided_id: taskDecidedId
+    });
+  }
+  
+  return tasks;
+}
+
 // ================== TEST ENTRY POINT ==================
 function runExecutionSelfTest() {
   if (EXECUTION_GUARD) {

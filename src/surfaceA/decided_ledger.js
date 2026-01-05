@@ -323,6 +323,180 @@ function listConfirmedSpeakable() {
   return items;
 }
 
+// ================== LINKAGE HELPERS ==================
+function linkDecidedToTask(decided_id, task_input) {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  
+  // Verify decided_id exists and status = "confirmed"
+  const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    throw new Error('No DECIDED items found');
+  }
+  
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('decided_id');
+  const statusIdx = headerRow.indexOf('status');
+  
+  if (idIdx === -1 || statusIdx === -1) {
+    throw new Error('Invalid DECIDED sheet structure');
+  }
+  
+  // Find the item
+  let found = false;
+  let itemStatus = null;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx] || '').trim() === String(decided_id).trim()) {
+      found = true;
+      itemStatus = String(data[i][statusIdx] || '').trim();
+      break;
+    }
+  }
+  
+  if (!found) {
+    throw new Error('DECIDED item not found: ' + decided_id);
+  }
+  
+  if (itemStatus !== STATUS_CONFIRMED) {
+    throw new Error('DECIDED item must be confirmed. Current status: ' + itemStatus);
+  }
+  
+  // Call createTask from execution_tasks.gs
+  if (typeof createTask !== 'function') {
+    throw new Error('createTask function not available from execution_tasks.gs');
+  }
+  
+  // Set task.decided_id = decided_id
+  const taskInput = task_input || {};
+  taskInput.decided_id = String(decided_id).trim();
+  
+  const task_id = createTask(taskInput);
+  
+  Logger.log('Linked DECIDED item ' + decided_id + ' to task ' + task_id);
+  return task_id;
+}
+
+function listConfirmedWithLinkedTasks() {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    return [];
+  }
+  
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('decided_id');
+  const statusIdx = headerRow.indexOf('status');
+  const sourceIdx = headerRow.indexOf('source');
+  const titleIdx = headerRow.indexOf('title');
+  const descIdx = headerRow.indexOf('description');
+  const reversibilityIdx = headerRow.indexOf('reversibility');
+  const notesIdx = headerRow.indexOf('notes');
+  const proposedAtIdx = headerRow.indexOf('proposed_at');
+  const confirmedAtIdx = headerRow.indexOf('confirmed_at');
+  const deferredUntilIdx = headerRow.indexOf('deferred_until');
+  const usageIdx = headerRow.indexOf('allowed_surface_usage');
+  
+  if (idIdx === -1 || statusIdx === -1) {
+    return [];
+  }
+  
+  // Get task counts by decided_id (read-only aggregation)
+  const taskCounts = {};
+  try {
+    // Read all tasks and count by decided_id
+    const allTasks = getAllTasksWithDecidedId();
+    for (const task of allTasks) {
+      if (task.decided_id) {
+        const did = String(task.decided_id).trim();
+        taskCounts[did] = (taskCounts[did] || 0) + 1;
+      }
+    }
+  } catch (e) {
+    Logger.log('Could not read tasks for aggregation: ' + e.message);
+  }
+  
+  const items = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const itemStatus = String(row[statusIdx] || '').trim();
+    
+    // Only confirmed items
+    if (itemStatus !== STATUS_CONFIRMED) {
+      continue;
+    }
+    
+    const decidedId = String(row[idIdx] || '').trim();
+    const linkedTaskCount = taskCounts[decidedId] || 0;
+    
+    items.push({
+      decided_id: decidedId,
+      source: sourceIdx >= 0 ? row[sourceIdx] : '',
+      title: titleIdx >= 0 ? row[titleIdx] : '',
+      description: descIdx >= 0 ? row[descIdx] : '',
+      status: itemStatus,
+      proposed_at: proposedAtIdx >= 0 ? row[proposedAtIdx] : null,
+      confirmed_at: confirmedAtIdx >= 0 ? row[confirmedAtIdx] : null,
+      deferred_until: deferredUntilIdx >= 0 ? row[deferredUntilIdx] : null,
+      allowed_surface_usage: usageIdx >= 0 ? row[usageIdx] : '',
+      reversibility: reversibilityIdx >= 0 ? row[reversibilityIdx] : '',
+      notes: notesIdx >= 0 ? row[notesIdx] : '',
+      linked_task_count: linkedTaskCount
+    });
+  }
+  
+  return items;
+}
+
+// Helper to get all tasks with decided_id (read-only)
+function getAllTasksWithDecidedId() {
+  try {
+    // Read the EXECUTION_TASKS sheet directly for aggregation
+    const ss = SpreadsheetApp.getActive();
+    const taskSheet = ss.getSheetByName('EXECUTION_TASKS');
+    if (!taskSheet) {
+      return [];
+    }
+    
+    const taskData = taskSheet.getDataRange().getValues();
+    if (taskData.length <= 1) {
+      return [];
+    }
+    
+    const taskHeaderRow = taskData[0];
+    const taskIdIdx = taskHeaderRow.indexOf('task_id');
+    const taskDecidedIdIdx = taskHeaderRow.indexOf('decided_id');
+    
+    if (taskIdIdx === -1 || taskDecidedIdIdx === -1) {
+      return [];
+    }
+    
+    const tasks = [];
+    for (let i = 1; i < taskData.length; i++) {
+      const taskRow = taskData[i];
+      const decidedId = taskRow[taskDecidedIdIdx];
+      if (decidedId) {
+        tasks.push({
+          task_id: taskRow[taskIdIdx],
+          decided_id: String(decidedId).trim()
+        });
+      }
+    }
+    
+    return tasks;
+  } catch (e) {
+    Logger.log('Could not read tasks: ' + e.message);
+    return [];
+  }
+}
+
 // ================== TEST ENTRY POINT ==================
 function runDecidedSelfTest() {
   if (DECIDED_GUARD) {

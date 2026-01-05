@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-const SURFACEB_DAILY_GUARD = true;
+const SURFACEB_DAILY_GUARD = false;
 
 // Surface B — Daily Read Model
 
@@ -13,21 +13,21 @@ const SURFACEB_DAILY_GUARD = true;
  *
  * Rules:
  * - READ ONLY
- * - NO writes to RAW, SURFACE_A, DERIVED, or DECIDED
+ * - NO writes to any sheet
+ * - NO Gemini
  * - NO decisions
  * - NO invitations
  * - NO pressure language
+ * - NO "should" language
  * - Silence is valid output
  ************************************************************/
 
 // ================== TAB NAMES ==================
-const SURFACEB_DAILY_TAB_SURFACE_A = 'SURFACE_A';
+const SURFACEB_DAILY_TAB_SURFACE_A = 'DAILY_BRIEF';
 const SURFACEB_DAILY_TAB_DERIVED = 'DERIVED_SIGNALS';
-const SURFACEB_DAILY_TAB_DECIDED = 'DECIDED';
-const SURFACEB_DAILY_TAB_DAILY_VIEW = 'DAILY_VIEW';
 
 // ================== ENTRY POINT ==================
-function generateDailyBrief() {
+function runSurfaceBDailyOnce() {
   if (SURFACEB_DAILY_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
@@ -35,17 +35,14 @@ function generateDailyBrief() {
 
   const surfaceA = readTodaySurfaceA();
   const derivedSignals = readActiveDerivedSignals();
-  const decidedItems = readSpokenDecidedItems();
+  const decidedItems = readConfirmedSpeakable();
 
-  const brief = formatDailyBrief(surfaceA, derivedSignals, decidedItems);
+  const brief = composeDailyBrief(surfaceA, derivedSignals, decidedItems);
 
-  if (brief.length === 0) {
-    Logger.log('No content to display. Silence is valid output.');
-    writeDailyView([]);
-    return;
-  }
+  Logger.log('=== DAILY BRIEF ===');
+  Logger.log(brief);
+  Logger.log('=== END DAILY BRIEF ===');
 
-  writeDailyView(brief);
   Logger.log('--- SURFACE B DAILY BRIEF END ---');
 }
 
@@ -123,11 +120,11 @@ function readActiveDerivedSignals() {
   // Find header indices
   const headerRow = data[0];
   const fieldIdx = headerRow.indexOf('field');
-  const phraseIdx = headerRow.indexOf('phrase');
+  const patternKeyIdx = headerRow.indexOf('pattern_key');
   const countIdx = headerRow.indexOf('count');
   const windowIdx = headerRow.indexOf('window');
 
-  if (fieldIdx === -1) {
+  if (fieldIdx === -1 || patternKeyIdx === -1) {
     return [];
   }
 
@@ -136,14 +133,14 @@ function readActiveDerivedSignals() {
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const field = row[fieldIdx];
-    const phrase = row[phraseIdx];
+    const patternKey = row[patternKeyIdx];
     const count = row[countIdx];
     const window = row[windowIdx];
 
-    if (field && phrase) {
+    if (field && patternKey) {
       signals.push({
         field: String(field).trim(),
-        phrase: String(phrase).trim(),
+        pattern_key: String(patternKey).trim(),
         count: count ? Number(count) : 0,
         window: window ? String(window).trim() : ''
       });
@@ -153,147 +150,77 @@ function readActiveDerivedSignals() {
   return signals;
 }
 
-function readSpokenDecidedItems() {
-  const sheet = getSheet(SURFACEB_DAILY_TAB_DECIDED);
-  if (!sheet) {
-    return [];
-  }
-  const data = sheet.getDataRange().getValues();
-
-  if (data.length <= 1) {
-    return [];
-  }
-
-  // Find header indices
-  const headerRow = data[0];
-  const idIdx = headerRow.indexOf('decided_id');
-  const typeIdx = headerRow.indexOf('type');
-  const statusIdx = headerRow.indexOf('status');
-  const titleIdx = headerRow.indexOf('title');
-  const bodyIdx = headerRow.indexOf('body');
-  const usageIdx = headerRow.indexOf('allowed_surface_usage');
-
-  if (statusIdx === -1 || usageIdx === -1) {
-    return [];
-  }
-
-  const items = [];
-
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const status = String(row[statusIdx] || '').trim();
-    const usage = String(row[usageIdx] || '').trim();
-
-    // Only confirmed items marked can_be_spoken
-    if (status === 'confirmed' && usage === 'can_be_spoken') {
-      items.push({
-        decided_id: idIdx >= 0 ? String(row[idIdx] || '').trim() : '',
-        type: typeIdx >= 0 ? String(row[typeIdx] || '').trim() : '',
-        title: titleIdx >= 0 ? String(row[titleIdx] || '').trim() : '',
-        body: bodyIdx >= 0 ? String(row[bodyIdx] || '').trim() : ''
-      });
+function readConfirmedSpeakable() {
+  try {
+    // Call listConfirmedSpeakable from decided_ledger.js
+    if (typeof listConfirmedSpeakable === 'function') {
+      return listConfirmedSpeakable();
     }
+  } catch (e) {
+    Logger.log('Could not read DECIDED items: ' + e.message);
   }
-
-  return items;
+  return [];
 }
 
-// ================== FORMAT BRIEF ==================
-function formatDailyBrief(surfaceA, derivedSignals, decidedItems) {
+// ================== COMPOSE BRIEF ==================
+function composeDailyBrief(surfaceA, derivedSignals, decidedItems) {
   const lines = [];
 
-  // Surface A content
+  // Today section (from Surface A)
+  lines.push('Today');
   if (surfaceA) {
     if (surfaceA.orientation && surfaceA.orientation.trim()) {
-      lines.push('ORIENTATION');
       lines.push(surfaceA.orientation);
-      lines.push('');
     }
-
     if (surfaceA.attention && surfaceA.attention.trim()) {
-      lines.push('ATTENTION');
       lines.push(surfaceA.attention);
-      lines.push('');
     }
-
     if (surfaceA.context && surfaceA.context.trim()) {
-      lines.push('CONTEXT');
       lines.push(surfaceA.context);
-      lines.push('');
     }
-
     if (surfaceA.framing && surfaceA.framing.trim()) {
-      lines.push('FRAMING');
       lines.push(surfaceA.framing);
-      lines.push('');
     }
-
     if (surfaceA.reflection && surfaceA.reflection.trim()) {
-      lines.push('REFLECTION');
       lines.push(surfaceA.reflection);
-      lines.push('');
     }
+  } else {
+    lines.push('No data available for this section today.');
   }
+  lines.push('');
 
-  // Derived signals
+  // Patterns section (from DERIVED)
+  lines.push('Patterns');
   if (derivedSignals.length > 0) {
-    lines.push('RECURRING PATTERNS');
     for (const signal of derivedSignals) {
-      lines.push(signal.phrase + ' (' + signal.count + 'x in ' + signal.window + ')');
+      lines.push(signal.pattern_key + ' (' + signal.count + 'x in ' + signal.window + ')');
     }
-    lines.push('');
+  } else {
+    lines.push('No data available for this section today.');
   }
+  lines.push('');
 
-  // Decided items
+  // Commitments section (from DECIDED)
+  lines.push('Commitments');
   if (decidedItems.length > 0) {
-    lines.push('ACTIVE COMMITMENTS');
     for (const item of decidedItems) {
       if (item.title) {
         lines.push(item.title);
       }
-      if (item.body) {
-        lines.push(item.body);
+      if (item.description) {
+        lines.push(item.description);
       }
-      lines.push('');
     }
+  } else {
+    lines.push('No data available for this section today.');
   }
 
-  // Remove trailing empty lines
-  while (lines.length > 0 && lines[lines.length - 1] === '') {
-    lines.pop();
-  }
-
-  return lines;
-}
-
-// ================== WRITE OUTPUT ==================
-function writeDailyView(briefLines) {
-  const sheet = getOrCreateSheet(SURFACEB_DAILY_TAB_DAILY_VIEW);
-  sheet.clearContents();
-
-  if (briefLines.length === 0) {
-    return;
-  }
-
-  // Write as single column
-  const rows = briefLines.map(line => [line]);
-  sheet.getRange(1, 1, rows.length, 1).setValues(rows);
+  return lines.join('\n');
 }
 
 // ================== HELPERS ==================
 function getSheet(name) {
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(name);
-  return sheet;
-}
-
-function getOrCreateSheet(name) {
-  const ss = SpreadsheetApp.getActive();
-  let sheet = ss.getSheetByName(name);
-
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-  }
-
   return sheet;
 }

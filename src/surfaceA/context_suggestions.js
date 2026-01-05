@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-const CONTEXT_SUGGESTIONS_GUARD = true;
+const CONTEXT_SUGGESTIONS_GUARD = false;
 
 // Context → Execution Bridge (Non-Coercive)
 
@@ -16,217 +16,368 @@ const CONTEXT_SUGGESTIONS_GUARD = true;
  * - Dismissible
  * - Never pressure
  * - No background suggestions
- * - Allowed: "Create a task to follow up with [Name]?"
- * - Forbidden: "This is important", "You should reach out"
+ * - No triggers
+ * - No calls to Surface A, DERIVED, DECIDED, or Execution
+ * - No Gemini
+ * - Silence is a valid outcome
  ************************************************************/
 
 // ================== TAB NAMES ==================
 const CONTEXT_SUGGESTIONS_TAB_PEOPLE = 'PEOPLE';
 const CONTEXT_SUGGESTIONS_TAB_INTERACTIONS = 'INTERACTIONS';
-const CONTEXT_SUGGESTIONS_TAB_SUGGESTIONS = 'CONTEXT_SUGGESTIONS';
+const CONTEXT_SUGGESTIONS_TAB_STATE = 'CONTEXT_SUGGESTION_STATE';
 
-// ================== ENTRY POINT ==================
-function generateContextSuggestions() {
+// ================== SCRIPT PROPERTIES KEY ==================
+const PROP_KEY_ENABLED = 'CONTEXT_SUGGESTIONS_ENABLED';
+
+// ================== SUGGESTION TYPES ==================
+const SUGGESTION_TYPE_FOLLOW_UP = 'follow_up';
+const SUGGESTION_TYPE_BIRTHDAY = 'birthday';
+const SUGGESTION_TYPE_RAPPORT = 'rapport';
+
+// ================== TIME WINDOWS ==================
+const FOLLOW_UP_MIN_DAYS = 7;
+const FOLLOW_UP_MAX_DAYS = 30;
+
+// ================== OPT-IN CONTROL ==================
+function enableContextSuggestions() {
   if (CONTEXT_SUGGESTIONS_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
-  Logger.log('--- CONTEXT SUGGESTIONS START ---');
+  PropertiesService.getScriptProperties().setProperty(PROP_KEY_ENABLED, 'true');
+  Logger.log('Context suggestions enabled');
+}
 
-  const suggestions = findFollowUpOpportunities();
+function disableContextSuggestions() {
+  if (CONTEXT_SUGGESTIONS_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  PropertiesService.getScriptProperties().setProperty(PROP_KEY_ENABLED, 'false');
+  Logger.log('Context suggestions disabled');
+}
 
-  if (suggestions.length === 0) {
-    Logger.log('No suggestions found. Silence is valid output.');
-    writeSuggestions([]);
+function isContextSuggestionsEnabled() {
+  const value = PropertiesService.getScriptProperties().getProperty(PROP_KEY_ENABLED);
+  // Default is false
+  return value === 'true';
+}
+
+// ================== STATE STORE ==================
+function initSuggestionStateSheet() {
+  const sheet = getOrCreateSheet(CONTEXT_SUGGESTIONS_TAB_STATE);
+  const data = sheet.getDataRange().getValues();
+  
+  // Write headers only if empty
+  if (data.length > 0) {
     return;
   }
-
-  writeSuggestions(suggestions);
-  Logger.log('--- CONTEXT SUGGESTIONS END ---');
+  
+  const header = [
+    'suggestion_id',
+    'person_id',
+    'suggestion_type',
+    'created_at',
+    'dismissed_at'
+  ];
+  
+  sheet.getRange(1, 1, 1, header.length).setValues([header]);
 }
 
-// ================== SUGGESTION LOGIC ==================
-function findFollowUpOpportunities() {
-  const people = getPeople();
-  const interactions = getAllInteractions();
-  const suggestions = [];
-
-  // Group interactions by person
-  const interactionsByPerson = new Map();
-  for (const interaction of interactions) {
-    if (!interactionsByPerson.has(interaction.person_id)) {
-      interactionsByPerson.set(interaction.person_id, []);
-    }
-    interactionsByPerson.get(interaction.person_id).push(interaction);
+// ================== SUGGEST FOLLOW-UP ==================
+function suggestFollowUp(person_id) {
+  if (CONTEXT_SUGGESTIONS_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
   }
-
-  // Find people with recent interactions (last 30 days) but no follow-up
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  for (const person of people) {
-    const personInteractions = interactionsByPerson.get(person.person_id) || [];
-    
-    if (personInteractions.length === 0) {
-      continue;
-    }
-
-    // Find most recent interaction
-    const mostRecent = personInteractions[0]; // Already sorted by date descending
-    
-    if (!mostRecent.date || !(mostRecent.date instanceof Date)) {
-      continue;
-    }
-
-    // Check if interaction is within last 30 days
-    if (mostRecent.date < thirtyDaysAgo) {
-      continue;
-    }
-
-    // Check if there's already a task for this person (optional check)
-    // We'll skip this check to keep it simple and non-coercive
-
-    // Create suggestion
-    suggestions.push({
-      person_id: person.person_id,
-      person_name: person.name,
-      last_interaction_date: mostRecent.date,
-      suggestion_text: 'Create a task to follow up with ' + person.name + '?'
-    });
+  
+  // Precondition: CONTEXT_SUGGESTIONS_ENABLED === true
+  if (!isContextSuggestionsEnabled()) {
+    return null;
   }
-
-  return suggestions;
-}
-
-// ================== READ CONTEXT ==================
-function getPeople() {
-  const sheet = getSheet(CONTEXT_SUGGESTIONS_TAB_PEOPLE);
-  if (!sheet) {
-    return [];
+  
+  // Precondition: person exists
+  const person = getPersonById(person_id);
+  if (!person) {
+    return null;
   }
-  const data = sheet.getDataRange().getValues();
-
-  if (data.length <= 1) {
-    return [];
+  
+  // Precondition: person.privacy_level != "sensitive"
+  if (person.privacy_level === 'sensitive') {
+    return null;
   }
-
-  const headerRow = data[0];
-  const idIdx = headerRow.indexOf('person_id');
-  const nameIdx = headerRow.indexOf('name');
-
-  const people = [];
-
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    people.push({
-      person_id: row[idIdx],
-      name: row[nameIdx]
-    });
+  
+  // Precondition: no active (non-dismissed) suggestion of this type for this person
+  if (hasActiveSuggestion(person_id, SUGGESTION_TYPE_FOLLOW_UP)) {
+    return null;
   }
-
-  return people;
-}
-
-function getAllInteractions() {
-  const sheet = getSheet(CONTEXT_SUGGESTIONS_TAB_INTERACTIONS);
-  if (!sheet) {
-    return [];
+  
+  // Read last INTERACTION for the person
+  const lastInteraction = getLastInteraction(person_id);
+  if (!lastInteraction) {
+    return null;
   }
-  const data = sheet.getDataRange().getValues();
-
-  if (data.length <= 1) {
-    return [];
+  
+  // Check if last interaction is within reasonable window (7-30 days)
+  const now = new Date();
+  const daysSince = Math.floor((now - lastInteraction.occurred_at) / (1000 * 60 * 60 * 24));
+  
+  if (daysSince < FOLLOW_UP_MIN_DAYS || daysSince > FOLLOW_UP_MAX_DAYS) {
+    return null;
   }
-
-  const headerRow = data[0];
-  const idIdx = headerRow.indexOf('interaction_id');
-  const personIdx = headerRow.indexOf('person_id');
-  const dateIdx = headerRow.indexOf('date');
-  const summaryIdx = headerRow.indexOf('summary');
-  const sourceIdx = headerRow.indexOf('source');
-  const createdIdx = headerRow.indexOf('created_at');
-
-  const interactions = [];
-
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    interactions.push({
-      interaction_id: row[idIdx],
-      person_id: row[personIdx],
-      date: row[dateIdx],
-      summary: row[summaryIdx],
-      source: row[sourceIdx],
-      created_at: row[createdIdx]
-    });
-  }
-
-  // Sort by date descending (most recent first)
-  interactions.sort((a, b) => {
-    const dateA = a.date instanceof Date ? a.date.getTime() : 0;
-    const dateB = b.date instanceof Date ? b.date.getTime() : 0;
-    return dateB - dateA;
-  });
-
-  return interactions;
-}
-
-// ================== WRITE OUTPUT ==================
-function writeSuggestions(suggestions) {
-  const sheet = getOrCreateSheet(CONTEXT_SUGGESTIONS_TAB_SUGGESTIONS);
-  sheet.clearContents();
-
-  if (suggestions.length === 0) {
-    return;
-  }
-
-  // Write header
-  const header = ['person_id', 'person_name', 'last_interaction_date', 'suggestion_text'];
-  const rows = [header];
-
-  // Write suggestion rows
-  for (const suggestion of suggestions) {
-    rows.push([
-      suggestion.person_id,
-      suggestion.person_name,
-      suggestion.last_interaction_date,
-      suggestion.suggestion_text
-    ]);
-  }
-
-  sheet.getRange(1, 1, rows.length, header.length).setValues(rows);
+  
+  // Create suggestion
+  const suggestionId = generateSuggestionId();
+  const suggestion = {
+    suggestion_id: suggestionId,
+    text: 'A past interaction with ' + person.display_name + ' may be worth revisiting.'
+  };
+  
+  // Store suggestion in state
+  storeSuggestion(suggestionId, person_id, SUGGESTION_TYPE_FOLLOW_UP);
+  
+  Logger.log('Created follow-up suggestion: ' + suggestionId + ' for person: ' + person_id);
+  return suggestion;
 }
 
 // ================== DISMISS SUGGESTION ==================
-function dismissSuggestion(personId) {
+function dismissSuggestion(suggestion_id) {
   if (CONTEXT_SUGGESTIONS_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
-  const sheet = getOrCreateSheet(CONTEXT_SUGGESTIONS_TAB_SUGGESTIONS);
+  
+  const sheet = getOrCreateSheet(CONTEXT_SUGGESTIONS_TAB_STATE);
   const data = sheet.getDataRange().getValues();
-
+  
   if (data.length <= 1) {
     return false;
   }
-
+  
   const headerRow = data[0];
-  const personIdIdx = headerRow.indexOf('person_id');
-
-  if (personIdIdx === -1) {
+  const idIdx = headerRow.indexOf('suggestion_id');
+  const dismissedIdx = headerRow.indexOf('dismissed_at');
+  
+  if (idIdx === -1 || dismissedIdx === -1) {
     return false;
   }
-
-  // Find and remove the suggestion
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][personIdIdx] === personId) {
-      sheet.deleteRow(i + 1); // +1 because sheet rows are 1-indexed
-      Logger.log('Dismissed suggestion for person: ' + personId);
-      return true;
+  
+  // Find the suggestion
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx] || '').trim() === String(suggestion_id).trim()) {
+      rowIdx = i + 1; // +1 because sheet rows are 1-indexed
+      break;
     }
   }
-
-  return false;
+  
+  if (rowIdx === -1) {
+    return false;
+  }
+  
+  // Check if already dismissed
+  const currentDismissed = data[rowIdx - 1][dismissedIdx];
+  if (currentDismissed) {
+    return true; // Already dismissed
+  }
+  
+  // Mark dismissed_at
+  sheet.getRange(rowIdx, dismissedIdx + 1).setValue(new Date());
+  
+  Logger.log('Dismissed suggestion: ' + suggestion_id);
+  return true;
 }
 
 // ================== HELPERS ==================
+function getPersonById(person_id) {
+  const sheet = getSheet(CONTEXT_SUGGESTIONS_TAB_PEOPLE);
+  if (!sheet) {
+    return null;
+  }
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    return null;
+  }
+  
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('person_id');
+  const displayNameIdx = headerRow.indexOf('display_name');
+  const privacyLevelIdx = headerRow.indexOf('privacy_level');
+  
+  if (idIdx === -1) {
+    return null;
+  }
+  
+  const personIdStr = String(person_id).trim();
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const rowPersonId = String(row[idIdx] || '').trim();
+    
+    if (rowPersonId === personIdStr) {
+      return {
+        person_id: rowPersonId,
+        display_name: displayNameIdx >= 0 ? row[displayNameIdx] : '',
+        privacy_level: privacyLevelIdx >= 0 ? row[privacyLevelIdx] : ''
+      };
+    }
+  }
+  
+  return null;
+}
+
+function getLastInteraction(person_id) {
+  const sheet = getSheet(CONTEXT_SUGGESTIONS_TAB_INTERACTIONS);
+  if (!sheet) {
+    return null;
+  }
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    return null;
+  }
+  
+  const headerRow = data[0];
+  const personIdx = headerRow.indexOf('person_id');
+  const occurredIdx = headerRow.indexOf('occurred_at');
+  
+  if (personIdx === -1 || occurredIdx === -1) {
+    return null;
+  }
+  
+  const personIdStr = String(person_id).trim();
+  let lastInteraction = null;
+  let lastDate = null;
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const rowPersonId = String(row[personIdx] || '').trim();
+    
+    if (rowPersonId !== personIdStr) {
+      continue;
+    }
+    
+    const occurredAt = row[occurredIdx];
+    if (!occurredAt || !(occurredAt instanceof Date)) {
+      continue;
+    }
+    
+    if (!lastDate || occurredAt > lastDate) {
+      lastDate = occurredAt;
+      lastInteraction = {
+        person_id: rowPersonId,
+        occurred_at: occurredAt
+      };
+    }
+  }
+  
+  return lastInteraction;
+}
+
+function hasActiveSuggestion(person_id, suggestion_type) {
+  const sheet = getSheet(CONTEXT_SUGGESTIONS_TAB_STATE);
+  if (!sheet) {
+    return false;
+  }
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    return false;
+  }
+  
+  const headerRow = data[0];
+  const personIdx = headerRow.indexOf('person_id');
+  const typeIdx = headerRow.indexOf('suggestion_type');
+  const dismissedIdx = headerRow.indexOf('dismissed_at');
+  
+  if (personIdx === -1 || typeIdx === -1 || dismissedIdx === -1) {
+    return false;
+  }
+  
+  const personIdStr = String(person_id).trim();
+  const typeStr = String(suggestion_type).trim();
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const rowPersonId = String(row[personIdx] || '').trim();
+    const rowType = String(row[typeIdx] || '').trim();
+    const dismissed = row[dismissedIdx];
+    
+    if (rowPersonId === personIdStr && rowType === typeStr && !dismissed) {
+      return true; // Active (non-dismissed) suggestion found
+    }
+  }
+  
+  return false;
+}
+
+function storeSuggestion(suggestion_id, person_id, suggestion_type) {
+  initSuggestionStateSheet();
+  const sheet = getOrCreateSheet(CONTEXT_SUGGESTIONS_TAB_STATE);
+  
+  const now = new Date();
+  const row = [
+    String(suggestion_id).trim(),
+    String(person_id).trim(),
+    String(suggestion_type).trim(),
+    now,
+    '' // dismissed_at empty for new suggestions
+  ];
+  
+  sheet.appendRow(row);
+}
+
+function getActiveSuggestionsCount() {
+  const sheet = getSheet(CONTEXT_SUGGESTIONS_TAB_STATE);
+  if (!sheet) {
+    return 0;
+  }
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    return 0;
+  }
+  
+  const headerRow = data[0];
+  const dismissedIdx = headerRow.indexOf('dismissed_at');
+  
+  if (dismissedIdx === -1) {
+    return 0;
+  }
+  
+  let count = 0;
+  for (let i = 1; i < data.length; i++) {
+    const dismissed = data[i][dismissedIdx];
+    if (!dismissed) {
+      count++;
+    }
+  }
+  
+  return count;
+}
+
+function generateSuggestionId() {
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 10000);
+  return 'SUGG-' + timestamp + '-' + random;
+}
+
+// ================== TEST ENTRY POINT ==================
+function runContextSuggestionsSelfTest() {
+  if (CONTEXT_SUGGESTIONS_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  Logger.log('--- CONTEXT SUGGESTIONS SELF TEST START ---');
+  
+  const enabled = isContextSuggestionsEnabled();
+  Logger.log('Suggestions enabled: ' + enabled);
+  
+  initSuggestionStateSheet();
+  const activeCount = getActiveSuggestionsCount();
+  Logger.log('Active suggestions count: ' + activeCount);
+  
+  Logger.log('--- CONTEXT SUGGESTIONS SELF TEST END ---');
+}
+
+// ================== SHEET HELPERS ==================
 function getSheet(name) {
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(name);
@@ -236,10 +387,10 @@ function getSheet(name) {
 function getOrCreateSheet(name) {
   const ss = SpreadsheetApp.getActive();
   let sheet = ss.getSheetByName(name);
-
+  
   if (!sheet) {
     sheet = ss.insertSheet(name);
   }
-
+  
   return sheet;
 }

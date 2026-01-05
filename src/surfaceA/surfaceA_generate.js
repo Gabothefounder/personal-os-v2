@@ -12,8 +12,8 @@
  ************************************************************/
 
 // ================== TAB NAMES ==================
-const TAB_RAW   = 'RAW';
-const TAB_SURFACE_A = 'SURFACE_A';
+const SURFACEA_GEN_TAB_RAW = 'RAW';
+const SURFACEA_GEN_TAB_SURFACE_A = 'SURFACE_A';
 
 // ================== ENTRY POINT ==================
 function runDailySynthesis() {
@@ -306,7 +306,7 @@ function parseStringField(text, fieldName) {
 
 // ================== WRITE OUTPUT ==================
 function writeSurfaceASubstrate(substrate, status) {
-  const sheet = getSheetOrFail(TAB_SURFACE_A);
+  const sheet = getSheetOrFail(SURFACEA_GEN_TAB_SURFACE_A);
   const now = new Date();
 
   const orientationText = substrate.orientation.map(x => '• ' + x).join('\n');
@@ -329,7 +329,7 @@ function writeSurfaceASubstrate(substrate, status) {
 
 // ================== HELPERS ==================
 function getRecentRawNotes(limit) {
-  const sheet = getSheetOrFail(TAB_RAW);
+  const sheet = getSheetOrFail(SURFACEA_GEN_TAB_RAW);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) return [];

@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-throw new Error("TEMP GUARD: Do not run yet");
+const DECIDED_GUARD = true;
 
 // DECIDED — Human Commitment Ledger (Authoritative, Manual)
 
@@ -20,7 +20,7 @@ throw new Error("TEMP GUARD: Do not run yet");
  ************************************************************/
 
 // ================== TAB NAME ==================
-const TAB_DECIDED = 'DECIDED';
+const DECIDED_TAB_DECIDED = 'DECIDED';
 
 // ================== CONSTANTS ==================
 const TYPE_PRINCIPLE = 'Principle';
@@ -44,7 +44,10 @@ const USAGE_CAN_BE_SPOKEN = 'can_be_spoken';
 
 // ================== INITIALIZATION ==================
 function initializeDecidedLedger() {
-  const sheet = getOrCreateSheet(TAB_DECIDED);
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
   
   // Check if already initialized
   const data = sheet.getDataRange().getValues();
@@ -74,6 +77,9 @@ function initializeDecidedLedger() {
 
 // ================== ADD PROPOSED ITEM ==================
 function proposeDecidedItem(type, title, body, reversibility, allowedSurfaceUsage) {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   // Validate type
   const validTypes = [TYPE_PRINCIPLE, TYPE_OBJECTIVE, TYPE_PROJECT, TYPE_CONSTRAINT, TYPE_DECISION];
   if (!validTypes.includes(type)) {
@@ -99,7 +105,7 @@ function proposeDecidedItem(type, title, body, reversibility, allowedSurfaceUsag
     throw new Error('Body is required');
   }
 
-  const sheet = getOrCreateSheet(TAB_DECIDED);
+  const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
   initializeDecidedLedger();
 
   // Generate ID
@@ -128,27 +134,42 @@ function proposeDecidedItem(type, title, body, reversibility, allowedSurfaceUsag
 
 // ================== STATE TRANSITIONS ==================
 function confirmDecidedItem(decidedId) {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   return transitionDecidedItem(decidedId, STATUS_PROPOSED, STATUS_CONFIRMED);
 }
 
 function deferDecidedItem(decidedId) {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   return transitionDecidedItem(decidedId, STATUS_PROPOSED, STATUS_DEFERRED);
 }
 
 function rejectDecidedItem(decidedId) {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   return transitionDecidedItem(decidedId, STATUS_PROPOSED, STATUS_REJECTED);
 }
 
 function archiveDecidedItem(decidedId) {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   return transitionDecidedItem(decidedId, STATUS_CONFIRMED, STATUS_ARCHIVED);
 }
 
 function supersedeDecidedItem(decidedId) {
+  if (DECIDED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   return transitionDecidedItem(decidedId, STATUS_CONFIRMED, STATUS_SUPERSEDED);
 }
 
 function transitionDecidedItem(decidedId, fromStatus, toStatus) {
-  const sheet = getOrCreateSheet(TAB_DECIDED);
+  const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) {
@@ -198,7 +219,7 @@ function transitionDecidedItem(decidedId, fromStatus, toStatus) {
 
 // ================== QUERY FUNCTIONS ==================
 function getDecidedItems(status, type) {
-  const sheet = getOrCreateSheet(TAB_DECIDED);
+  const sheet = getOrCreateSheet(DECIDED_TAB_DECIDED);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) {

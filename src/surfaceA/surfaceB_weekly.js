@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-throw new Error("TEMP GUARD: Do not run yet");
+const SURFACEB_WEEKLY_GUARD = true;
 
 // Surface B — Weekly Read Model
 
@@ -20,12 +20,15 @@ throw new Error("TEMP GUARD: Do not run yet");
  ************************************************************/
 
 // ================== TAB NAMES ==================
-const TAB_DERIVED = 'DERIVED_SIGNALS';
-const TAB_DECIDED = 'DECIDED';
-const TAB_WEEKLY_VIEW = 'WEEKLY_VIEW';
+const SURFACEB_WEEKLY_TAB_DERIVED = 'DERIVED_SIGNALS';
+const SURFACEB_WEEKLY_TAB_DECIDED = 'DECIDED';
+const SURFACEB_WEEKLY_TAB_WEEKLY_VIEW = 'WEEKLY_VIEW';
 
 // ================== ENTRY POINT ==================
 function generateWeeklyBrief() {
+  if (SURFACEB_WEEKLY_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   Logger.log('--- SURFACE B WEEKLY BRIEF START ---');
 
   const stableSignals = readStableDerivedSignals();
@@ -45,7 +48,7 @@ function generateWeeklyBrief() {
 
 // ================== READ SOURCES ==================
 function readStableDerivedSignals() {
-  const sheet = getSheet(TAB_DERIVED);
+  const sheet = getSheet(SURFACEB_WEEKLY_TAB_DERIVED);
   if (!sheet) {
     return [];
   }
@@ -94,7 +97,7 @@ function readStableDerivedSignals() {
 }
 
 function readSpokenDecidedItems() {
-  const sheet = getSheet(TAB_DECIDED);
+  const sheet = getSheet(SURFACEB_WEEKLY_TAB_DECIDED);
   if (!sheet) {
     return [];
   }
@@ -198,7 +201,7 @@ function formatWeeklyBrief(stableSignals, decidedItems) {
 
 // ================== WRITE OUTPUT ==================
 function writeWeeklyView(briefLines) {
-  const sheet = getOrCreateSheet(TAB_WEEKLY_VIEW);
+  const sheet = getOrCreateSheet(SURFACEB_WEEKLY_TAB_WEEKLY_VIEW);
   sheet.clearContents();
 
   if (briefLines.length === 0) {

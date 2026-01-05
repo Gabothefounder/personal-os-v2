@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-throw new Error("TEMP GUARD: Do not run yet");
+const CONTEXT_SUGGESTIONS_GUARD = true;
 
 // Context → Execution Bridge (Non-Coercive)
 
@@ -21,12 +21,15 @@ throw new Error("TEMP GUARD: Do not run yet");
  ************************************************************/
 
 // ================== TAB NAMES ==================
-const TAB_PEOPLE = 'PEOPLE';
-const TAB_INTERACTIONS = 'INTERACTIONS';
-const TAB_SUGGESTIONS = 'CONTEXT_SUGGESTIONS';
+const CONTEXT_SUGGESTIONS_TAB_PEOPLE = 'PEOPLE';
+const CONTEXT_SUGGESTIONS_TAB_INTERACTIONS = 'INTERACTIONS';
+const CONTEXT_SUGGESTIONS_TAB_SUGGESTIONS = 'CONTEXT_SUGGESTIONS';
 
 // ================== ENTRY POINT ==================
 function generateContextSuggestions() {
+  if (CONTEXT_SUGGESTIONS_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   Logger.log('--- CONTEXT SUGGESTIONS START ---');
 
   const suggestions = findFollowUpOpportunities();
@@ -96,7 +99,7 @@ function findFollowUpOpportunities() {
 
 // ================== READ CONTEXT ==================
 function getPeople() {
-  const sheet = getSheet(TAB_PEOPLE);
+  const sheet = getSheet(CONTEXT_SUGGESTIONS_TAB_PEOPLE);
   if (!sheet) {
     return [];
   }
@@ -124,7 +127,7 @@ function getPeople() {
 }
 
 function getAllInteractions() {
-  const sheet = getSheet(TAB_INTERACTIONS);
+  const sheet = getSheet(CONTEXT_SUGGESTIONS_TAB_INTERACTIONS);
   if (!sheet) {
     return [];
   }
@@ -168,7 +171,7 @@ function getAllInteractions() {
 
 // ================== WRITE OUTPUT ==================
 function writeSuggestions(suggestions) {
-  const sheet = getOrCreateSheet(TAB_SUGGESTIONS);
+  const sheet = getOrCreateSheet(CONTEXT_SUGGESTIONS_TAB_SUGGESTIONS);
   sheet.clearContents();
 
   if (suggestions.length === 0) {
@@ -194,7 +197,10 @@ function writeSuggestions(suggestions) {
 
 // ================== DISMISS SUGGESTION ==================
 function dismissSuggestion(personId) {
-  const sheet = getOrCreateSheet(TAB_SUGGESTIONS);
+  if (CONTEXT_SUGGESTIONS_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(CONTEXT_SUGGESTIONS_TAB_SUGGESTIONS);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) {

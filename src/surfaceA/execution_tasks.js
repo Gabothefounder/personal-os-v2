@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-throw new Error("TEMP GUARD: Do not run yet");
+const EXECUTION_GUARD = true;
 
 // Execution — Action Without Meaning
 
@@ -21,7 +21,7 @@ throw new Error("TEMP GUARD: Do not run yet");
  ************************************************************/
 
 // ================== TAB NAME ==================
-const TAB_EXECUTION_TASKS = 'EXECUTION_TASKS';
+const EXECUTION_TAB_TASKS = 'EXECUTION_TASKS';
 
 // ================== CONSTANTS ==================
 const STATUS_OPEN = 'open';
@@ -29,7 +29,10 @@ const STATUS_DONE = 'done';
 
 // ================== INITIALIZATION ==================
 function initializeExecutionTasks() {
-  const sheet = getOrCreateSheet(TAB_EXECUTION_TASKS);
+  if (EXECUTION_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
   
   // Check if already initialized
   const data = sheet.getDataRange().getValues();
@@ -56,11 +59,14 @@ function initializeExecutionTasks() {
 
 // ================== TASK OPERATIONS ==================
 function createTask(title, linkedDecidedId) {
+  if (EXECUTION_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   if (!title || !title.trim()) {
     throw new Error('Title is required');
   }
 
-  const sheet = getOrCreateSheet(TAB_EXECUTION_TASKS);
+  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
   initializeExecutionTasks();
 
   // Generate ID
@@ -85,7 +91,10 @@ function createTask(title, linkedDecidedId) {
 }
 
 function completeTask(taskId) {
-  const sheet = getOrCreateSheet(TAB_EXECUTION_TASKS);
+  if (EXECUTION_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) {
@@ -128,7 +137,10 @@ function completeTask(taskId) {
 }
 
 function deleteTask(taskId) {
-  const sheet = getOrCreateSheet(TAB_EXECUTION_TASKS);
+  if (EXECUTION_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) {
@@ -165,7 +177,7 @@ function deleteTask(taskId) {
 
 // ================== QUERY FUNCTIONS ==================
 function getTasks(status, linkedDecidedId) {
-  const sheet = getOrCreateSheet(TAB_EXECUTION_TASKS);
+  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) {

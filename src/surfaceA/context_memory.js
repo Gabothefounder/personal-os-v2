@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-throw new Error("TEMP GUARD: Do not run yet");
+const CONTEXT_MEMORY_GUARD = true;
 
 // Context Memory — Fact Preservation Without Intent
 
@@ -18,13 +18,16 @@ throw new Error("TEMP GUARD: Do not run yet");
  ************************************************************/
 
 // ================== TAB NAMES ==================
-const TAB_PEOPLE = 'PEOPLE';
-const TAB_FACTS = 'FACTS';
-const TAB_INTERACTIONS = 'INTERACTIONS';
+const CONTEXT_MEMORY_TAB_PEOPLE = 'PEOPLE';
+const CONTEXT_MEMORY_TAB_FACTS = 'FACTS';
+const CONTEXT_MEMORY_TAB_INTERACTIONS = 'INTERACTIONS';
 
 // ================== PEOPLE ==================
 function initializePeople() {
-  const sheet = getOrCreateSheet(TAB_PEOPLE);
+  if (CONTEXT_MEMORY_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   
   const data = sheet.getDataRange().getValues();
   if (data.length > 0 && data[0][0] === 'person_id') {
@@ -46,11 +49,14 @@ function initializePeople() {
 }
 
 function addPerson(name) {
+  if (CONTEXT_MEMORY_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   if (!name || !name.trim()) {
     throw new Error('Name is required');
   }
 
-  const sheet = getOrCreateSheet(TAB_PEOPLE);
+  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   initializePeople();
 
   const personId = generatePersonId();
@@ -70,7 +76,7 @@ function addPerson(name) {
 }
 
 function getPeople() {
-  const sheet = getSheet(TAB_PEOPLE);
+  const sheet = getSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   if (!sheet) {
     return [];
   }
@@ -103,7 +109,10 @@ function getPeople() {
 
 // ================== FACTS ==================
 function initializeFacts() {
-  const sheet = getOrCreateSheet(TAB_FACTS);
+  if (CONTEXT_MEMORY_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_FACTS);
   
   const data = sheet.getDataRange().getValues();
   if (data.length > 0 && data[0][0] === 'fact_id') {
@@ -128,6 +137,9 @@ function initializeFacts() {
 }
 
 function addFact(personId, predicate, object, source, expiresAt) {
+  if (CONTEXT_MEMORY_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   if (!personId || !personId.trim()) {
     throw new Error('person_id is required');
   }
@@ -144,7 +156,7 @@ function addFact(personId, predicate, object, source, expiresAt) {
     throw new Error('source is required');
   }
 
-  const sheet = getOrCreateSheet(TAB_FACTS);
+  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_FACTS);
   initializeFacts();
 
   const factId = generateFactId();
@@ -167,7 +179,7 @@ function addFact(personId, predicate, object, source, expiresAt) {
 }
 
 function getFacts(personId) {
-  const sheet = getSheet(TAB_FACTS);
+  const sheet = getSheet(CONTEXT_MEMORY_TAB_FACTS);
   if (!sheet) {
     return [];
   }
@@ -220,7 +232,10 @@ function getFacts(personId) {
 
 // ================== INTERACTIONS ==================
 function initializeInteractions() {
-  const sheet = getOrCreateSheet(TAB_INTERACTIONS);
+  if (CONTEXT_MEMORY_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
   
   const data = sheet.getDataRange().getValues();
   if (data.length > 0 && data[0][0] === 'interaction_id') {
@@ -244,6 +259,9 @@ function initializeInteractions() {
 }
 
 function addInteraction(personId, date, summary, source) {
+  if (CONTEXT_MEMORY_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   if (!personId || !personId.trim()) {
     throw new Error('person_id is required');
   }
@@ -260,7 +278,7 @@ function addInteraction(personId, date, summary, source) {
     throw new Error('source is required');
   }
 
-  const sheet = getOrCreateSheet(TAB_INTERACTIONS);
+  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
   initializeInteractions();
 
   const interactionId = generateInteractionId();
@@ -282,7 +300,7 @@ function addInteraction(personId, date, summary, source) {
 }
 
 function getInteractions(personId) {
-  const sheet = getSheet(TAB_INTERACTIONS);
+  const sheet = getSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
   if (!sheet) {
     return [];
   }

@@ -1,5 +1,8 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-throw new Error("TEMP GUARD: Do not run yet");
+const DERIVED_GUARD = false;
+
+// DRY RUN MODE — Set to false to enable writes
+const DRY_RUN = true;
 
 // DERIVED — Pattern Observation Layer (Deterministic, Non-LLM)
 
@@ -21,44 +24,82 @@ throw new Error("TEMP GUARD: Do not run yet");
  ************************************************************/
 
 // ================== TAB NAMES ==================
-const TAB_SURFACE_A = 'SURFACE_A';
-const TAB_DERIVED = 'DERIVED_SIGNALS';
+const DERIVED_TAB_SURFACE_A = 'DAILY_BRIEF';
+const DERIVED_TAB_DERIVED = 'DERIVED_SIGNALS';
 
 // ================== ENTRY POINT ==================
-function computeDerivedSignals() {
+function runDerivedOnce() {
+  if (DERIVED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   Logger.log('--- DERIVED COMPUTE START ---');
+  Logger.log('DRY_RUN mode: ' + DRY_RUN);
 
   const surfaceData = readSurfaceAData();
   
   if (surfaceData.length === 0) {
-    Logger.log('No SURFACE_A data found. Writing nothing.');
-    writeDerivedSignals([]);
+    Logger.log('No SURFACE_A data found.');
+    if (!DRY_RUN) {
+      writeDerivedSignals([]);
+    }
+    Logger.log('--- DERIVED COMPUTE END ---');
     return;
   }
+
+  Logger.log('Found ' + surfaceData.length + ' SURFACE_A records');
 
   const signals = [];
 
   // Analyze last 5 days
   const signals5 = detectRecurrences(surfaceData, 5);
   signals.push(...signals5);
+  Logger.log('5-day window: ' + signals5.length + ' signals');
 
   // Analyze last 14 days
   const signals14 = detectRecurrences(surfaceData, 14);
   signals.push(...signals14);
+  Logger.log('14-day window: ' + signals14.length + ' signals');
 
   if (signals.length === 0) {
-    Logger.log('No stable signals detected. Writing nothing.');
-    writeDerivedSignals([]);
+    Logger.log('No stable signals detected.');
+    if (!DRY_RUN) {
+      writeDerivedSignals([]);
+    }
+    Logger.log('--- DERIVED COMPUTE END ---');
     return;
   }
 
-  writeDerivedSignals(signals);
+  // Log all signals
+  Logger.log('=== DETECTED SIGNALS ===');
+  for (const signal of signals) {
+    Logger.log('Field: ' + signal.field);
+    Logger.log('Phrase: ' + signal.phrase);
+    Logger.log('Count: ' + signal.count);
+    Logger.log('Window: ' + signal.window);
+    Logger.log('Dates: ' + signal.dates.join(', '));
+    Logger.log('---');
+  }
+
+  if (DRY_RUN) {
+    Logger.log('DRY_RUN: Skipping write to DERIVED_SIGNALS sheet');
+  } else {
+    writeDerivedSignals(signals);
+    Logger.log('Wrote ' + signals.length + ' signals to DERIVED_SIGNALS sheet');
+  }
+
   Logger.log('--- DERIVED COMPUTE END ---');
+}
+
+function computeDerivedSignals() {
+  if (DERIVED_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  runDerivedOnce();
 }
 
 // ================== READ SURFACE_A ==================
 function readSurfaceAData() {
-  const sheet = getSheetOrFail(TAB_SURFACE_A);
+  const sheet = getSheetOrFail(DERIVED_TAB_SURFACE_A);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) return [];
@@ -207,7 +248,7 @@ function normalizePhrase(phrase) {
 
 // ================== WRITE OUTPUT ==================
 function writeDerivedSignals(signals) {
-  const sheet = getOrCreateSheet(TAB_DERIVED);
+  const sheet = getOrCreateSheet(DERIVED_TAB_DERIVED);
   sheet.clearContents();
 
   if (signals.length === 0) {

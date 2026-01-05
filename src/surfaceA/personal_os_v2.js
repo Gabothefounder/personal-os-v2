@@ -10,8 +10,8 @@
  ************************************************************/
 
 // ================== TAB NAMES ==================
-const TAB_RAW   = 'RAW';
-const TAB_DAILY = 'DAILY_BRIEF';
+const SURFACEA_TAB_RAW = 'RAW';
+const SURFACEA_TAB_SURFACE_A = 'DAILY_BRIEF';
 
 // ================== ENTRY POINT ==================
 function runDailySynthesis() {
@@ -304,7 +304,7 @@ function parseStringField(text, fieldName) {
 
 // ================== WRITE OUTPUT ==================
 function writeDailyBrief(brief, status) {
-  const sheet = getSheetOrFail(TAB_DAILY);
+  const sheet = getSheetOrFail(SURFACEA_TAB_SURFACE_A);
   const now = new Date();
 
   const orientationText = brief.orientation.map(x => '• ' + x).join('\n');
@@ -327,7 +327,7 @@ function writeDailyBrief(brief, status) {
 
 // ================== HELPERS ==================
 function getRecentRawNotes(limit) {
-  const sheet = getSheetOrFail(TAB_RAW);
+  const sheet = getSheetOrFail(SURFACEA_TAB_RAW);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) return [];

@@ -1,5 +1,5 @@
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-throw new Error("TEMP GUARD: Do not run yet");
+const SURFACEB_DAILY_GUARD = true;
 
 // Surface B — Daily Read Model
 
@@ -21,13 +21,16 @@ throw new Error("TEMP GUARD: Do not run yet");
  ************************************************************/
 
 // ================== TAB NAMES ==================
-const TAB_SURFACE_A = 'SURFACE_A';
-const TAB_DERIVED = 'DERIVED_SIGNALS';
-const TAB_DECIDED = 'DECIDED';
-const TAB_DAILY_VIEW = 'DAILY_VIEW';
+const SURFACEB_DAILY_TAB_SURFACE_A = 'SURFACE_A';
+const SURFACEB_DAILY_TAB_DERIVED = 'DERIVED_SIGNALS';
+const SURFACEB_DAILY_TAB_DECIDED = 'DECIDED';
+const SURFACEB_DAILY_TAB_DAILY_VIEW = 'DAILY_VIEW';
 
 // ================== ENTRY POINT ==================
 function generateDailyBrief() {
+  if (SURFACEB_DAILY_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
   Logger.log('--- SURFACE B DAILY BRIEF START ---');
 
   const surfaceA = readTodaySurfaceA();
@@ -48,7 +51,7 @@ function generateDailyBrief() {
 
 // ================== READ SOURCES ==================
 function readTodaySurfaceA() {
-  const sheet = getSheet(TAB_SURFACE_A);
+  const sheet = getSheet(SURFACEB_DAILY_TAB_SURFACE_A);
   if (!sheet) {
     return null;
   }
@@ -107,7 +110,7 @@ function readTodaySurfaceA() {
 }
 
 function readActiveDerivedSignals() {
-  const sheet = getSheet(TAB_DERIVED);
+  const sheet = getSheet(SURFACEB_DAILY_TAB_DERIVED);
   if (!sheet) {
     return [];
   }
@@ -151,7 +154,7 @@ function readActiveDerivedSignals() {
 }
 
 function readSpokenDecidedItems() {
-  const sheet = getSheet(TAB_DECIDED);
+  const sheet = getSheet(SURFACEB_DAILY_TAB_DECIDED);
   if (!sheet) {
     return [];
   }
@@ -265,7 +268,7 @@ function formatDailyBrief(surfaceA, derivedSignals, decidedItems) {
 
 // ================== WRITE OUTPUT ==================
 function writeDailyView(briefLines) {
-  const sheet = getOrCreateSheet(TAB_DAILY_VIEW);
+  const sheet = getOrCreateSheet(SURFACEB_DAILY_TAB_DAILY_VIEW);
   sheet.clearContents();
 
   if (briefLines.length === 0) {

@@ -2,7 +2,7 @@
 const DERIVED_GUARD = false;
 
 // DRY RUN MODE — Set to false to enable writes
-const DRY_RUN = true;
+const DRY_RUN = false;
 
 // DERIVED — Pattern Observation Layer (Deterministic, Non-LLM)
 
@@ -205,12 +205,15 @@ function detectFieldRecurrences(records, fieldName, windowDays) {
   }
 
   // Find phrases that recur (appear 2+ times)
+  const totalRecords = records.length;
   for (const [normalized, entry] of phraseCounts.entries()) {
     if (entry.count >= 2) {
       signals.push({
         field: fieldName,
         phrase: entry.original,
+        pattern_key: normalized,
         count: entry.count,
+        possible: totalRecords,
         window: windowDays + ' days',
         dates: entry.dates.map(d => d.toISOString().split('T')[0]).sort()
       });
@@ -251,22 +254,22 @@ function writeDerivedSignals(signals) {
   const sheet = getOrCreateSheet(DERIVED_TAB_DERIVED);
   sheet.clearContents();
 
-  if (signals.length === 0) {
-    return;
-  }
-
+  const now = new Date();
+  
   // Write header
-  const header = ['field', 'phrase', 'count', 'window', 'dates'];
+  const header = ['generated_at', 'window', 'field', 'pattern_key', 'count', 'possible', 'dates_json'];
   const rows = [header];
 
   // Write signal rows
   for (const signal of signals) {
     rows.push([
-      signal.field,
-      signal.phrase,
-      signal.count,
+      now,
       signal.window,
-      signal.dates.join(', ')
+      signal.field,
+      signal.pattern_key,
+      signal.count,
+      signal.possible,
+      JSON.stringify(signal.dates)
     ]);
   }
 

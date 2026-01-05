@@ -12,8 +12,8 @@ const SURFACEB_WEEKLY_GUARD = false;
  * - No importance framing, no auto-entry into DECIDE MODE
  *
  * Rules:
- * - READ ONLY
- * - NO writes to any sheet
+ * - READ ONLY (no writes to source sheets)
+ * - Writes to WEEKLY_VIEW sheet only
  * - NO Gemini
  * - No auto-entry into DECIDE MODE
  * - No importance framing
@@ -52,6 +52,8 @@ function runSurfaceBWeeklyOnce() {
   Logger.log('=== WEEKLY BRIEF ===');
   Logger.log(brief);
   Logger.log('=== END WEEKLY BRIEF ===');
+
+  writeWeeklyView(brief);
 
   Logger.log('--- SURFACE B WEEKLY BRIEF END ---');
 }
@@ -193,9 +195,35 @@ function composeWeeklyBrief(eligibleSignals, decidedItems) {
   return lines.join('\n');
 }
 
+// ================== WRITE OUTPUT ==================
+function writeWeeklyView(text) {
+  const sheet = getOrCreateSheet('WEEKLY_VIEW');
+  sheet.clearContents();
+
+  const now = new Date();
+  const rows = [
+    [now], // Row 1: generated_at
+    ['weekly'], // Row 2: view_type
+    [text] // Row 3+: the composed text (single cell, preserve line breaks)
+  ];
+
+  sheet.getRange(1, 1, rows.length, 1).setValues(rows);
+}
+
 // ================== HELPERS ==================
 function getSheet(name) {
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(name);
+  return sheet;
+}
+
+function getOrCreateSheet(name) {
+  const ss = SpreadsheetApp.getActive();
+  let sheet = ss.getSheetByName(name);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+  }
+
   return sheet;
 }

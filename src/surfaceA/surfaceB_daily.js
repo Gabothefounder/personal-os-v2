@@ -12,8 +12,8 @@ const SURFACEB_DAILY_GUARD = false;
  * - No decisions, no invitations, no pressure language
  *
  * Rules:
- * - READ ONLY
- * - NO writes to any sheet
+ * - READ ONLY (no writes to source sheets)
+ * - Writes to DAILY_VIEW sheet only
  * - NO Gemini
  * - NO decisions
  * - NO invitations
@@ -42,6 +42,8 @@ function runSurfaceBDailyOnce() {
   Logger.log('=== DAILY BRIEF ===');
   Logger.log(brief);
   Logger.log('=== END DAILY BRIEF ===');
+
+  writeDailyView(brief);
 
   Logger.log('--- SURFACE B DAILY BRIEF END ---');
 }
@@ -218,9 +220,35 @@ function composeDailyBrief(surfaceA, derivedSignals, decidedItems) {
   return lines.join('\n');
 }
 
+// ================== WRITE OUTPUT ==================
+function writeDailyView(text) {
+  const sheet = getOrCreateSheet('DAILY_VIEW');
+  sheet.clearContents();
+
+  const now = new Date();
+  const rows = [
+    [now], // Row 1: generated_at
+    ['daily'], // Row 2: view_type
+    [text] // Row 3+: the composed text (single cell, preserve line breaks)
+  ];
+
+  sheet.getRange(1, 1, rows.length, 1).setValues(rows);
+}
+
 // ================== HELPERS ==================
 function getSheet(name) {
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(name);
+  return sheet;
+}
+
+function getOrCreateSheet(name) {
+  const ss = SpreadsheetApp.getActive();
+  let sheet = ss.getSheetByName(name);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+  }
+
   return sheet;
 }

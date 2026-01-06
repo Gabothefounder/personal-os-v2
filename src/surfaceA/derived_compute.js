@@ -1,3 +1,4 @@
+// DERIVED FROZEN — schema stable — 2026-01-06
 // TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
 const DERIVED_GUARD = false;
 
@@ -24,23 +25,23 @@ const DRY_RUN = false;
  ************************************************************/
 
 // ================== TAB NAMES ==================
-const DERIVED_TAB_SURFACE_A = 'DAILY_BRIEF';
+const DERIVED_TAB_SURFACE_A = 'SURFACE_A';
 const DERIVED_TAB_DERIVED = 'DERIVED_SIGNALS';
 
 // ================== ENTRY POINT ==================
-function runDerivedOnce() {
+function _runDerivedOnce() {
   if (DERIVED_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
   Logger.log('--- DERIVED COMPUTE START ---');
   Logger.log('DRY_RUN mode: ' + DRY_RUN);
 
-  const surfaceData = readSurfaceAData();
+  const surfaceData = _readSurfaceAData();
   
   if (surfaceData.length === 0) {
     Logger.log('No SURFACE_A data found.');
     if (!DRY_RUN) {
-      writeDerivedSignals([]);
+      _writeDerivedSignals([]);
     }
     Logger.log('--- DERIVED COMPUTE END ---');
     return;
@@ -51,19 +52,19 @@ function runDerivedOnce() {
   const signals = [];
 
   // Analyze last 5 days
-  const signals5 = detectRecurrences(surfaceData, 5);
+  const signals5 = _detectRecurrences(surfaceData, 5);
   signals.push(...signals5);
   Logger.log('5-day window: ' + signals5.length + ' signals');
 
   // Analyze last 14 days
-  const signals14 = detectRecurrences(surfaceData, 14);
+  const signals14 = _detectRecurrences(surfaceData, 14);
   signals.push(...signals14);
   Logger.log('14-day window: ' + signals14.length + ' signals');
 
   if (signals.length === 0) {
     Logger.log('No stable signals detected.');
     if (!DRY_RUN) {
-      writeDerivedSignals([]);
+      _writeDerivedSignals([]);
     }
     Logger.log('--- DERIVED COMPUTE END ---');
     return;
@@ -83,67 +84,73 @@ function runDerivedOnce() {
   if (DRY_RUN) {
     Logger.log('DRY_RUN: Skipping write to DERIVED_SIGNALS sheet');
   } else {
-    writeDerivedSignals(signals);
+    _writeDerivedSignals(signals);
     Logger.log('Wrote ' + signals.length + ' signals to DERIVED_SIGNALS sheet');
   }
 
   Logger.log('--- DERIVED COMPUTE END ---');
 }
 
-function computeDerivedSignals() {
+function _computeDerivedSignals() {
   if (DERIVED_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
-  runDerivedOnce();
+  _runDerivedOnce();
 }
 
 // ================== READ SURFACE_A ==================
-function readSurfaceAData() {
-  const sheet = getSheetOrFail(DERIVED_TAB_SURFACE_A);
+// Surface A writes data as key/value vertical pairs:
+// Column A: keys (generated_at, orientation, reflection, last_run_status, etc.)
+// Column B: values
+// Each run overwrites the previous entry.
+// NOTE: For pattern detection across multiple days, historical records would be needed.
+// Currently reads only the current run's data.
+function _readSurfaceAData() {
+  const sheet = _getSheetOrFail(DERIVED_TAB_SURFACE_A);
   const data = sheet.getDataRange().getValues();
 
-  if (data.length <= 1) return [];
+  if (data.length === 0) return [];
 
-  const records = [];
-  
-  // Parse header row to find column indices
-  const headerRow = data[0];
-  const generatedAtIdx = headerRow.indexOf('generated_at');
-  const orientationIdx = headerRow.indexOf('orientation');
-  const reflectionIdx = headerRow.indexOf('reflection');
+  // Build a map from keys (column A) to values (column B)
+  const keyValueMap = {};
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (row.length >= 2) {
+      const key = String(row[0] || '').trim();
+      const value = row[1];
+      if (key) {
+        keyValueMap[key] = value;
+      }
+    }
+  }
 
-  if (generatedAtIdx === -1) {
-    Logger.log('Missing generated_at column in SURFACE_A');
+  // Quality guard: only process successful Surface A runs
+  const status = keyValueMap['last_run_status'];
+  if (status !== 'SUCCESS') {
+    Logger.log('SURFACE_A last_run_status is not SUCCESS. Skipping DERIVED computation.');
     return [];
   }
 
-  // Read data rows
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const generatedAt = row[generatedAtIdx];
-    
-    if (!generatedAt || !(generatedAt instanceof Date)) {
-      continue;
-    }
-
-    const orientation = orientationIdx >= 0 ? String(row[orientationIdx] || '').trim() : '';
-    const reflection = reflectionIdx >= 0 ? String(row[reflectionIdx] || '').trim() : '';
-
-    records.push({
-      date: generatedAt,
-      orientation: orientation,
-      reflection: reflection
-    });
+  const generatedAt = keyValueMap['generated_at'];
+  if (!generatedAt || !(generatedAt instanceof Date)) {
+    Logger.log('Missing or invalid generated_at in SURFACE_A');
+    return [];
   }
 
-  // Sort by date descending (most recent first)
-  records.sort((a, b) => b.date.getTime() - a.date.getTime());
+  const orientation = keyValueMap['orientation'] ? String(keyValueMap['orientation']).trim() : '';
+  const reflection = keyValueMap['reflection'] ? String(keyValueMap['reflection']).trim() : '';
 
-  return records;
+  // Return single record (Surface A overwrites each run)
+  // For proper pattern detection, multiple historical records would be needed
+  return [{
+    date: generatedAt,
+    orientation: orientation,
+    reflection: reflection
+  }];
 }
 
 // ================== RECURRENCE DETECTION ==================
-function detectRecurrences(records, windowDays) {
+function _detectRecurrences(records, windowDays) {
   const signals = [];
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - windowDays);
@@ -156,17 +163,17 @@ function detectRecurrences(records, windowDays) {
   }
 
   // Analyze orientation field
-  const orientationSignals = detectFieldRecurrences(windowRecords, 'orientation', windowDays);
+  const orientationSignals = _detectFieldRecurrences(windowRecords, 'orientation', windowDays);
   signals.push(...orientationSignals);
 
   // Analyze reflection field
-  const reflectionSignals = detectFieldRecurrences(windowRecords, 'reflection', windowDays);
+  const reflectionSignals = _detectFieldRecurrences(windowRecords, 'reflection', windowDays);
   signals.push(...reflectionSignals);
 
   return signals;
 }
 
-function detectFieldRecurrences(records, fieldName, windowDays) {
+function _detectFieldRecurrences(records, fieldName, windowDays) {
   const signals = [];
   const phraseCounts = new Map();
 
@@ -180,10 +187,10 @@ function detectFieldRecurrences(records, fieldName, windowDays) {
     }
 
     // Parse phrases (orientation items or reflection sentences)
-    const phrases = parsePhrases(fieldValue);
+    const phrases = _parsePhrases(fieldValue);
 
     for (const phrase of phrases) {
-      const normalized = normalizePhrase(phrase);
+      const normalized = _normalizePhrase(phrase);
       
       if (normalized.length === 0) {
         continue;
@@ -224,7 +231,7 @@ function detectFieldRecurrences(records, fieldName, windowDays) {
 }
 
 // ================== TEXT PROCESSING ==================
-function parsePhrases(text) {
+function _parsePhrases(text) {
   // Split by bullet points or newlines
   const lines = text.split(/[•\n]/)
     .map(line => line.trim())
@@ -233,7 +240,7 @@ function parsePhrases(text) {
   return lines;
 }
 
-function normalizePhrase(phrase) {
+function _normalizePhrase(phrase) {
   // Lowercase
   let normalized = phrase.toLowerCase();
   
@@ -250,8 +257,8 @@ function normalizePhrase(phrase) {
 }
 
 // ================== WRITE OUTPUT ==================
-function writeDerivedSignals(signals) {
-  const sheet = getOrCreateSheet(DERIVED_TAB_DERIVED);
+function _writeDerivedSignals(signals) {
+  const sheet = _getOrCreateSheet(DERIVED_TAB_DERIVED);
   sheet.clearContents();
 
   const now = new Date();
@@ -277,24 +284,4 @@ function writeDerivedSignals(signals) {
 }
 
 // ================== HELPERS ==================
-function getSheetOrFail(name) {
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName(name);
-
-  if (!sheet) {
-    throw new Error('Missing required tab: ' + name);
-  }
-
-  return sheet;
-}
-
-function getOrCreateSheet(name) {
-  const ss = SpreadsheetApp.getActive();
-  let sheet = ss.getSheetByName(name);
-
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-  }
-
-  return sheet;
-}
+// _getSheetOrFail and _getOrCreateSheet are defined in personal_os_v2.js

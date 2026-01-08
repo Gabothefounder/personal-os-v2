@@ -192,6 +192,38 @@ function addPerson(input) {
   return personId;
 }
 
+function listPeople() {
+  const sheet = _getSheet(CONTEXT_MEMORY_TAB_PEOPLE);
+  if (!sheet) {
+    return [];
+  }
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length <= 1) {
+    return [];
+  }
+  
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('person_id');
+  const nameIdx = headerRow.indexOf('display_name');
+  
+  if (idIdx === -1 || nameIdx === -1) {
+    return [];
+  }
+  
+  const people = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    people.push({
+      id: row[idIdx],
+      name: nameIdx >= 0 ? row[nameIdx] : ''
+    });
+  }
+  
+  return people;
+}
+
 function _getPeople() {
   const sheet = _getSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   if (!sheet) {

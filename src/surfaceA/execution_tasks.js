@@ -1,15 +1,16 @@
-// TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-const EXECUTION_GUARD = false;
-
 // Execution — Action Without Meaning
 
 /************************************************************
- * Execution Task Management
+ * Execution Layer v2.0
  *
  * Purpose:
- * - Manage volatile tasks downstream of DECIDED
- * - Failure is neutral
- * - No feedback upward
+ * - Support doing without defining meaning
+ * - Remain volatile, reversible, and semantically neutral
+ *
+ * Core Objects:
+ * - Inbox Item (capture destination)
+ * - Task (volatile action items)
+ * - Project reference (read-only from DECIDED)
  *
  * Rules:
  * - Tasks are volatile
@@ -22,192 +23,417 @@ const EXECUTION_GUARD = false;
  * - No calls to Surface A, DERIVED, or DECIDED
  * - No scheduling logic
  * - No Gemini
+ * - No auto-prioritization, reminders, escalation, or metrics
  ************************************************************/
 
-// ================== TAB NAME ==================
+// ================== TAB NAMES ==================
+const EXECUTION_TAB_INBOX = 'EXECUTION_INBOX';
 const EXECUTION_TAB_TASKS = 'EXECUTION_TASKS';
 
 // ================== STATUS VALUES ==================
 const STATUS_OPEN = 'open';
 const STATUS_DONE = 'done';
-const STATUS_CANCELED = 'canceled';
+const STATUS_DELETED = 'deleted';
+const STATUS_CANCELED = 'canceled'; // Legacy support
 
 // ================== INITIALIZATION ==================
-function initExecutionSheet() {
-  if (EXECUTION_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
-  }
-  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
+function _initInboxSheet() {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
   
-  // Check if sheet is empty (no data rows)
   const data = sheet.getDataRange().getValues();
   if (data.length > 0) {
-    // Sheet has data, do not write headers
-    Logger.log('EXECUTION_TASKS sheet exists and has data');
+    return; // Sheet has data, do not write headers
+  }
+
+  // Inbox Item schema v1.0
+  const header = [
+    'inbox_id',
+    'created_at',
+    'content',
+    'capture_mode',
+    'source',
+    'notes'
+  ];
+
+  sheet.getRange(1, 1, 1, header.length).setValues([header]);
+}
+
+function _initExecutionSheet() {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length > 0) {
+    // Sheet has data - validate schema compatibility
+    _validateTaskSchema(sheet);
     return;
   }
 
-  // Write headers only if empty
+  // Task schema v1.0
   const header = [
     'task_id',
+    'created_at',
+    'content',
+    'state',
+    'project_id',
+    'origin',
+    'inbox_id',
+    'capture_mode',
+    'completed_at',
+    'completion_note',
+    'write_to_raw',
+    // Legacy fields for backward compatibility
     'title',
     'notes',
     'status',
-    'created_at',
-    'completed_at',
     'due_date',
     'decided_id'
   ];
 
   sheet.getRange(1, 1, 1, header.length).setValues([header]);
-  
-  Logger.log('EXECUTION_TASKS sheet initialized with headers');
 }
 
-// ================== TASK OPERATIONS ==================
-function createTask(input) {
-  if (EXECUTION_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
+function _validateTaskSchema(sheet) {
+  const data = sheet.getDataRange().getValues();
+  if (data.length === 0) {
+    return;
   }
+
+  const headerRow = data[0];
+  const requiredFields = ['task_id', 'created_at', 'content', 'state'];
   
-  if (!input || !input.title || !input.title.trim()) {
-    throw new Error('Title is required');
+  for (let i = 0; i < requiredFields.length; i++) {
+    if (headerRow.indexOf(requiredFields[i]) === -1) {
+      throw new Error('Invalid EXECUTION_TASKS schema: missing required field ' + requiredFields[i]);
+    }
+  }
+}
+
+// Public entry point for initialization
+function initExecutionSheet() {
+  _initInboxSheet();
+  _initExecutionSheet();
+}
+
+// ================== INBOX OPERATIONS ==================
+function createInboxItem(input) {
+  if (!input || (!input.content || !input.content.trim()) && (!input.audio_reference || !input.audio_reference.trim())) {
+    throw new Error('Content or audio_reference is required');
   }
 
-  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
-  initExecutionSheet();
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
+  _initInboxSheet();
 
-  // Generate ID
-  const taskId = generateTaskId();
+  const inboxId = _generateInboxId();
   const now = new Date();
+  const content = input.content ? String(input.content).trim() : '';
+  const captureMode = input.audio_reference ? 'audio' : 'text';
 
-  // Append row - no inference, no defaults beyond required fields
   const row = [
-    taskId,
-    String(input.title).trim(),
-    input.notes ? String(input.notes).trim() : '',
-    STATUS_OPEN,
+    inboxId,
     now,
-    '', // completed_at empty for open tasks
-    input.due_date || '',
-    input.decided_id ? String(input.decided_id).trim() : ''
+    content || input.audio_reference,
+    captureMode,
+    input.source ? String(input.source).trim() : '',
+    input.notes ? String(input.notes).trim() : ''
   ];
 
   sheet.appendRow(row);
+  return inboxId;
+}
+
+function promoteInboxToTask(inbox_id, options) {
+  options = options || {};
   
-  Logger.log('Created task: ' + taskId);
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    throw new Error('No inbox items found');
+  }
+
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('inbox_id');
+  const contentIdx = headerRow.indexOf('content');
+  const captureModeIdx = headerRow.indexOf('capture_mode');
+
+  if (idIdx === -1 || contentIdx === -1) {
+    throw new Error('Invalid EXECUTION_INBOX sheet structure');
+  }
+
+  // Find the inbox item
+  let inboxItem = null;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx] || '').trim() === String(inbox_id).trim()) {
+      inboxItem = {
+        inbox_id: String(data[i][idIdx]).trim(),
+        content: data[i][contentIdx],
+        capture_mode: captureModeIdx >= 0 ? String(data[i][captureModeIdx] || '').trim() : 'text'
+      };
+      break;
+    }
+  }
+
+  if (!inboxItem) {
+    throw new Error('Inbox item not found: ' + inbox_id);
+  }
+
+  // Create task from inbox item
+  const taskInput = {
+    content: inboxItem.content,
+    origin: 'inbox',
+    inbox_id: inboxItem.inbox_id,
+    capture_mode: inboxItem.capture_mode,
+    project_id: options.project_id || '',
+    write_to_raw: options.write_to_raw || false
+  };
+
+  const taskId = createTask(taskInput);
+
+  // Mark inbox item as processed (delete it)
+  _deleteInboxItem(inbox_id);
+
   return taskId;
 }
 
-function completeTask(task_id) {
-  if (EXECUTION_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
-  }
-  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
-  const data = sheet.getDataRange().getValues();
-
-  if (data.length <= 1) {
-    throw new Error('No tasks found');
-  }
-
-  // Find header indices
-  const headerRow = data[0];
-  const idIdx = headerRow.indexOf('task_id');
-  const statusIdx = headerRow.indexOf('status');
-  const completedAtIdx = headerRow.indexOf('completed_at');
-
-  if (idIdx === -1 || statusIdx === -1 || completedAtIdx === -1) {
-    throw new Error('Invalid EXECUTION_TASKS sheet structure');
-  }
-
-  // Find the task
-  let rowIdx = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idIdx] || '').trim() === String(task_id).trim()) {
-      rowIdx = i + 1; // +1 because sheet rows are 1-indexed
-      break;
-    }
-  }
-
-  if (rowIdx === -1) {
-    throw new Error('Task not found: ' + task_id);
-  }
-
-  // Update status
-  sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_DONE);
-
-  // Set completed_at
-  sheet.getRange(rowIdx, completedAtIdx + 1).setValue(new Date());
-
-  Logger.log('Completed task: ' + task_id);
+function markInboxDone(inbox_id, completion_note) {
+  _deleteInboxItem(inbox_id);
   return true;
 }
 
-function cancelTask(task_id) {
-  if (EXECUTION_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
-  }
-  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
-  const data = sheet.getDataRange().getValues();
-
-  if (data.length <= 1) {
-    throw new Error('No tasks found');
-  }
-
-  // Find header indices
-  const headerRow = data[0];
-  const idIdx = headerRow.indexOf('task_id');
-  const statusIdx = headerRow.indexOf('status');
-  const completedAtIdx = headerRow.indexOf('completed_at');
-
-  if (idIdx === -1 || statusIdx === -1 || completedAtIdx === -1) {
-    throw new Error('Invalid EXECUTION_TASKS sheet structure');
-  }
-
-  // Find the task
-  let rowIdx = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idIdx] || '').trim() === String(task_id).trim()) {
-      rowIdx = i + 1; // +1 because sheet rows are 1-indexed
-      break;
-    }
-  }
-
-  if (rowIdx === -1) {
-    throw new Error('Task not found: ' + task_id);
-  }
-
-  // Update status
-  sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_CANCELED);
-
-  // Set completed_at
-  sheet.getRange(rowIdx, completedAtIdx + 1).setValue(new Date());
-
-  Logger.log('Canceled task: ' + task_id);
+function deleteInboxItem(inbox_id) {
+  _deleteInboxItem(inbox_id);
   return true;
 }
 
-// ================== QUERY FUNCTIONS ==================
-function listOpenTasks() {
-  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
+function _deleteInboxItem(inbox_id) {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    return;
+  }
+
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('inbox_id');
+
+  if (idIdx === -1) {
+    return;
+  }
+
+  // Find and delete the row
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][idIdx] || '').trim() === String(inbox_id).trim()) {
+      sheet.deleteRow(i + 1);
+      break;
+    }
+  }
+}
+
+function listInboxItems() {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) {
     return [];
   }
 
-  // Find header indices
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('inbox_id');
+  const createdAtIdx = headerRow.indexOf('created_at');
+  const contentIdx = headerRow.indexOf('content');
+  const captureModeIdx = headerRow.indexOf('capture_mode');
+  const sourceIdx = headerRow.indexOf('source');
+  const notesIdx = headerRow.indexOf('notes');
+
+  if (idIdx === -1 || contentIdx === -1) {
+    return [];
+  }
+
+  const items = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    items.push({
+      inbox_id: row[idIdx],
+      created_at: createdAtIdx >= 0 ? row[createdAtIdx] : null,
+      content: row[contentIdx],
+      capture_mode: captureModeIdx >= 0 ? String(row[captureModeIdx] || '').trim() : 'text',
+      source: sourceIdx >= 0 ? (row[sourceIdx] ? String(row[sourceIdx]).trim() : '') : '',
+      notes: notesIdx >= 0 ? (row[notesIdx] ? String(row[notesIdx]).trim() : '') : ''
+    });
+  }
+
+  return items;
+}
+
+// ================== TASK OPERATIONS ==================
+function createTask(input) {
+  if (!input) {
+    throw new Error('Input is required');
+  }
+
+  // Backward compatibility: support 'title' field
+  const content = input.content ? String(input.content).trim() : 
+                  (input.title ? String(input.title).trim() : '');
+  
+  if (!content) {
+    throw new Error('Content (or title) is required');
+  }
+
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  _initExecutionSheet();
+
+  const taskId = _generateTaskId();
+  const now = new Date();
+  const state = STATUS_OPEN;
+  const origin = input.origin || (input.inbox_id ? 'inbox' : 'manual');
+
+  // Build row with v1.0 schema
+  const row = [
+    taskId, // task_id
+    now, // created_at
+    content, // content
+    state, // state
+    input.project_id ? String(input.project_id).trim() : '', // project_id
+    origin, // origin
+    input.inbox_id ? String(input.inbox_id).trim() : '', // inbox_id
+    input.capture_mode ? String(input.capture_mode).trim() : '', // capture_mode
+    '', // completed_at
+    '', // completion_note
+    input.write_to_raw ? true : false, // write_to_raw
+    // Legacy fields for backward compatibility
+    content, // title (same as content)
+    input.notes ? String(input.notes).trim() : '', // notes
+    state, // status (same as state)
+    input.due_date || '', // due_date (deprecated but preserved)
+    input.decided_id ? String(input.decided_id).trim() : '' // decided_id (legacy, maps to project_id if Project)
+  ];
+
+  sheet.appendRow(row);
+  return taskId;
+}
+
+function completeTask(task_id, completion_note) {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    throw new Error('No tasks found');
+  }
+
   const headerRow = data[0];
   const idIdx = headerRow.indexOf('task_id');
-  const titleIdx = headerRow.indexOf('title');
-  const notesIdx = headerRow.indexOf('notes');
-  const statusIdx = headerRow.indexOf('status');
-  const createdIdx = headerRow.indexOf('created_at');
-  const completedIdx = headerRow.indexOf('completed_at');
-  const dueDateIdx = headerRow.indexOf('due_date');
-  const decidedIdIdx = headerRow.indexOf('decided_id');
+  const stateIdx = headerRow.indexOf('state');
+  const statusIdx = headerRow.indexOf('status'); // Legacy
+  const completedAtIdx = headerRow.indexOf('completed_at');
+  const completionNoteIdx = headerRow.indexOf('completion_note');
 
-  if (idIdx === -1 || statusIdx === -1) {
+  if (idIdx === -1 || stateIdx === -1) {
+    throw new Error('Invalid EXECUTION_TASKS sheet structure');
+  }
+
+  // Find the task
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx] || '').trim() === String(task_id).trim()) {
+      rowIdx = i + 1;
+      break;
+    }
+  }
+
+  if (rowIdx === -1) {
+    throw new Error('Task not found: ' + task_id);
+  }
+
+  // Update state
+  sheet.getRange(rowIdx, stateIdx + 1).setValue(STATUS_DONE);
+
+  // Update legacy status if present
+  if (statusIdx >= 0) {
+    sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_DONE);
+  }
+
+  // Set completed_at
+  if (completedAtIdx >= 0) {
+    sheet.getRange(rowIdx, completedAtIdx + 1).setValue(new Date());
+  }
+
+  // Set completion_note if provided
+  if (completionNoteIdx >= 0 && completion_note) {
+    sheet.getRange(rowIdx, completionNoteIdx + 1).setValue(String(completion_note).trim());
+  }
+
+  return true;
+}
+
+function cancelTask(task_id) {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    throw new Error('No tasks found');
+  }
+
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('task_id');
+  const stateIdx = headerRow.indexOf('state');
+  const statusIdx = headerRow.indexOf('status'); // Legacy
+
+  if (idIdx === -1 || stateIdx === -1) {
+    throw new Error('Invalid EXECUTION_TASKS sheet structure');
+  }
+
+  // Find the task
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx] || '').trim() === String(task_id).trim()) {
+      rowIdx = i + 1;
+      break;
+    }
+  }
+
+  if (rowIdx === -1) {
+    throw new Error('Task not found: ' + task_id);
+  }
+
+  // Update state to deleted (v1.0) or canceled (legacy)
+  sheet.getRange(rowIdx, stateIdx + 1).setValue(STATUS_DELETED);
+
+  // Update legacy status if present
+  if (statusIdx >= 0) {
+    sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_CANCELED);
+  }
+
+  return true;
+}
+
+// ================== QUERY FUNCTIONS ==================
+function listOpenTasks() {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    return [];
+  }
+
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('task_id');
+  const contentIdx = headerRow.indexOf('content');
+  const titleIdx = headerRow.indexOf('title'); // Legacy
+  const stateIdx = headerRow.indexOf('state');
+  const statusIdx = headerRow.indexOf('status'); // Legacy
+  const createdIdx = headerRow.indexOf('created_at');
+  const projectIdIdx = headerRow.indexOf('project_id');
+  const originIdx = headerRow.indexOf('origin');
+  const inboxIdIdx = headerRow.indexOf('inbox_id');
+  const captureModeIdx = headerRow.indexOf('capture_mode');
+  const completedIdx = headerRow.indexOf('completed_at');
+  const completionNoteIdx = headerRow.indexOf('completion_note');
+  const writeToRawIdx = headerRow.indexOf('write_to_raw');
+  const notesIdx = headerRow.indexOf('notes');
+  const decidedIdIdx = headerRow.indexOf('decided_id'); // Legacy
+
+  if (idIdx === -1 || (stateIdx === -1 && statusIdx === -1)) {
     return [];
   }
 
@@ -215,22 +441,35 @@ function listOpenTasks() {
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    const taskStatus = String(row[statusIdx] || '').trim();
-
-    // Only return tasks where status = "open"
-    if (taskStatus !== STATUS_OPEN) {
+    
+    // Check state (v1.0) or status (legacy)
+    const state = stateIdx >= 0 ? String(row[stateIdx] || '').trim() : 
+                  (statusIdx >= 0 ? String(row[statusIdx] || '').trim() : '');
+    
+    // Only return tasks where state = "open"
+    if (state !== STATUS_OPEN) {
       continue;
     }
 
+    const content = contentIdx >= 0 ? row[contentIdx] : 
+                    (titleIdx >= 0 ? row[titleIdx] : '');
+
     tasks.push({
       task_id: row[idIdx],
-      title: titleIdx >= 0 ? row[titleIdx] : '',
-      notes: notesIdx >= 0 ? row[notesIdx] : '',
-      status: taskStatus,
+      content: content,
+      title: content, // Legacy compatibility
+      state: state,
+      status: state, // Legacy compatibility
       created_at: createdIdx >= 0 ? row[createdIdx] : null,
+      project_id: projectIdIdx >= 0 ? (row[projectIdIdx] ? String(row[projectIdIdx]).trim() : '') : '',
+      origin: originIdx >= 0 ? (row[originIdx] ? String(row[originIdx]).trim() : '') : '',
+      inbox_id: inboxIdIdx >= 0 ? (row[inboxIdIdx] ? String(row[inboxIdIdx]).trim() : '') : '',
+      capture_mode: captureModeIdx >= 0 ? (row[captureModeIdx] ? String(row[captureModeIdx]).trim() : '') : '',
       completed_at: completedIdx >= 0 ? row[completedIdx] : null,
-      due_date: dueDateIdx >= 0 ? row[dueDateIdx] : null,
-      decided_id: decidedIdIdx >= 0 ? (row[decidedIdIdx] ? String(row[decidedIdIdx]).trim() : '') : ''
+      completion_note: completionNoteIdx >= 0 ? (row[completionNoteIdx] ? String(row[completionNoteIdx]).trim() : '') : '',
+      write_to_raw: writeToRawIdx >= 0 ? (row[writeToRawIdx] === true || row[writeToRawIdx] === 'true') : false,
+      notes: notesIdx >= 0 ? (row[notesIdx] ? String(row[notesIdx]).trim() : '') : '',
+      decided_id: decidedIdIdx >= 0 ? (row[decidedIdIdx] ? String(row[decidedIdIdx]).trim() : '') : '' // Legacy
     });
   }
 
@@ -238,115 +477,107 @@ function listOpenTasks() {
 }
 
 function listTasksByDecided(decided_id) {
-  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
-  const data = sheet.getDataRange().getValues();
-  
-  if (data.length <= 1) {
-    return [];
-  }
-  
-  // Find header indices
-  const headerRow = data[0];
-  const idIdx = headerRow.indexOf('task_id');
-  const titleIdx = headerRow.indexOf('title');
-  const notesIdx = headerRow.indexOf('notes');
-  const statusIdx = headerRow.indexOf('status');
-  const createdIdx = headerRow.indexOf('created_at');
-  const completedIdx = headerRow.indexOf('completed_at');
-  const dueDateIdx = headerRow.indexOf('due_date');
-  const decidedIdIdx = headerRow.indexOf('decided_id');
-  
-  if (idIdx === -1 || decidedIdIdx === -1) {
-    return [];
-  }
-  
-  const tasks = [];
+  // Legacy function - maps to project_id if it's a Project
+  const tasks = listOpenTasks();
   const decidedIdStr = String(decided_id).trim();
   
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const taskDecidedId = row[decidedIdIdx] ? String(row[decidedIdIdx]).trim() : '';
-    
-    // Filter by decided_id
-    if (taskDecidedId !== decidedIdStr) {
-      continue;
-    }
-    
-    tasks.push({
-      task_id: row[idIdx],
-      title: titleIdx >= 0 ? row[titleIdx] : '',
-      notes: notesIdx >= 0 ? row[notesIdx] : '',
-      status: statusIdx >= 0 ? String(row[statusIdx] || '').trim() : '',
-      created_at: createdIdx >= 0 ? row[createdIdx] : null,
-      completed_at: completedIdx >= 0 ? row[completedIdx] : null,
-      due_date: dueDateIdx >= 0 ? row[dueDateIdx] : null,
-      decided_id: taskDecidedId
-    });
-  }
+  return tasks.filter(task => {
+    // Check both decided_id (legacy) and project_id (v1.0)
+    return (task.decided_id && task.decided_id === decidedIdStr) ||
+           (task.project_id && task.project_id === decidedIdStr);
+  });
+}
+
+function listTasksByProject(project_id) {
+  const tasks = listOpenTasks();
+  const projectIdStr = String(project_id).trim();
   
-  return tasks;
+  return tasks.filter(task => task.project_id === projectIdStr);
+}
+
+// ================== PROJECT HELPERS ==================
+function _readProjectsFromDecided() {
+  // Read-only access to DECIDED Projects
+  // This is a placeholder - actual implementation would read from DECIDED
+  // For now, return empty array to maintain contract
+  try {
+    if (typeof _listConfirmedSpeakable === 'function') {
+      const items = _listConfirmedSpeakable();
+      // Filter for Projects only (type === 'Project')
+      return items.filter(item => item.type === 'Project');
+    }
+  } catch (e) {
+    // Silent failure - no projects available
+  }
+  return [];
 }
 
 // ================== TEST ENTRY POINT ==================
 function runExecutionSelfTest() {
-  if (EXECUTION_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
-  }
   Logger.log('--- EXECUTION SELF TEST START ---');
 
-  initExecutionSheet();
+  _initInboxSheet();
+  _initExecutionSheet();
 
-  const sheet = getOrCreateSheet(EXECUTION_TAB_TASKS);
-  const data = sheet.getDataRange().getValues();
+  const taskSheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = taskSheet.getDataRange().getValues();
 
   if (data.length <= 1) {
-    Logger.log('No tasks found. Counts: open=0, done=0, canceled=0');
-    Logger.log('--- EXECUTION SELF TEST END ---');
-    return;
-  }
+    Logger.log('No tasks found. Counts: open=0, done=0, deleted=0');
+  } else {
+    const headerRow = data[0];
+    const stateIdx = headerRow.indexOf('state');
+    const statusIdx = headerRow.indexOf('status'); // Legacy
 
-  // Find header indices
-  const headerRow = data[0];
-  const statusIdx = headerRow.indexOf('status');
+    if (stateIdx === -1 && statusIdx === -1) {
+      Logger.log('Invalid sheet structure');
+    } else {
+      let openCount = 0;
+      let doneCount = 0;
+      let deletedCount = 0;
 
-  if (statusIdx === -1) {
-    Logger.log('Invalid sheet structure');
-    Logger.log('--- EXECUTION SELF TEST END ---');
-    return;
-  }
+      for (let i = 1; i < data.length; i++) {
+        const state = stateIdx >= 0 ? String(data[i][stateIdx] || '').trim() : 
+                      (statusIdx >= 0 ? String(data[i][statusIdx] || '').trim() : '');
+        
+        if (state === STATUS_OPEN) {
+          openCount++;
+        } else if (state === STATUS_DONE) {
+          doneCount++;
+        } else if (state === STATUS_DELETED || state === STATUS_CANCELED) {
+          deletedCount++;
+        }
+      }
 
-  // Count by status
-  let openCount = 0;
-  let doneCount = 0;
-  let canceledCount = 0;
-
-  for (let i = 1; i < data.length; i++) {
-    const status = String(data[i][statusIdx] || '').trim();
-    if (status === STATUS_OPEN) {
-      openCount++;
-    } else if (status === STATUS_DONE) {
-      doneCount++;
-    } else if (status === STATUS_CANCELED) {
-      canceledCount++;
+      Logger.log('Task counts by state:');
+      Logger.log('  open: ' + openCount);
+      Logger.log('  done: ' + doneCount);
+      Logger.log('  deleted: ' + deletedCount);
     }
   }
 
-  Logger.log('Task counts by status:');
-  Logger.log('  open: ' + openCount);
-  Logger.log('  done: ' + doneCount);
-  Logger.log('  canceled: ' + canceledCount);
+  const inboxSheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
+  const inboxData = inboxSheet.getDataRange().getValues();
+  const inboxCount = inboxData.length > 1 ? inboxData.length - 1 : 0;
+  Logger.log('Inbox items: ' + inboxCount);
 
   Logger.log('--- EXECUTION SELF TEST END ---');
 }
 
 // ================== HELPERS ==================
-function generateTaskId() {
+function _generateInboxId() {
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 10000);
+  return 'INBOX-' + timestamp + '-' + random;
+}
+
+function _generateTaskId() {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000);
   return 'TASK-' + timestamp + '-' + random;
 }
 
-function getOrCreateSheet(name) {
+function _getOrCreateSheet(name) {
   const ss = SpreadsheetApp.getActive();
   let sheet = ss.getSheetByName(name);
 

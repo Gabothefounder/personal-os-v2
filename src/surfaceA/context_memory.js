@@ -26,25 +26,40 @@ const CONTEXT_MEMORY_TAB_PEOPLE = 'PEOPLE';
 const CONTEXT_MEMORY_TAB_FACTS = 'FACTS';
 const CONTEXT_MEMORY_TAB_INTERACTIONS = 'INTERACTIONS';
 
+// ================== SCHEMA DEFINITIONS (FROZEN) ==================
+// SCHEMA FROZEN — 2026-01-06
+// PEOPLE: person_id, display_name, privacy_level, created_at, notes
+// FACTS: fact_id, person_id, predicate, object, source, created_at, expires_at
+// INTERACTIONS v1.0 (FROZEN): interaction_id, person_id, occurred_at, topic_tags, notes
+// INTERACTIONS v1.1 (FROZEN): interaction_id, person_id, occurred_at, topic_tags, notes, notes_audio, follow_up_hint, follow_up_note
+// INTERACTIONS v1.1 (FROZEN)
+// notes_audio: raw audio reference only (no auto-transcription)
+// follow_up_hint: non-binding marker of incompleteness
+// follow_up_note: descriptive only, no scheduling or obligation
+// INTERACTIONS memory is descriptive only.
+// Follow-up hints do not imply action.
+// Audio is stored raw and never interpreted.
+// Do not modify these schemas without explicit contract reopening.
+
 // ================== INITIALIZATION ==================
-function initContextSheets() {
+function _initContextSheets() {
   if (CONTEXT_MEMORY_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
   
-  initPeopleSheet();
-  initFactsSheet();
-  initInteractionsSheet();
+  _initPeopleSheet();
+  _initFactsSheet();
+  _initInteractionsSheet();
   
   Logger.log('Context sheets initialized');
 }
 
-function initPeopleSheet() {
-  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_PEOPLE);
+function _initPeopleSheet() {
+  const sheet = _getOrCreateSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   const data = sheet.getDataRange().getValues();
   
-  // Write headers only if empty
   if (data.length > 0) {
+    _validatePeopleSchema(data[0]);
     return;
   }
   
@@ -59,12 +74,12 @@ function initPeopleSheet() {
   sheet.getRange(1, 1, 1, header.length).setValues([header]);
 }
 
-function initFactsSheet() {
-  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_FACTS);
+function _initFactsSheet() {
+  const sheet = _getOrCreateSheet(CONTEXT_MEMORY_TAB_FACTS);
   const data = sheet.getDataRange().getValues();
   
-  // Write headers only if empty
   if (data.length > 0) {
+    _validateFactsSchema(data[0]);
     return;
   }
   
@@ -81,12 +96,12 @@ function initFactsSheet() {
   sheet.getRange(1, 1, 1, header.length).setValues([header]);
 }
 
-function initInteractionsSheet() {
-  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
+function _initInteractionsSheet() {
+  const sheet = _getOrCreateSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
   const data = sheet.getDataRange().getValues();
   
-  // Write headers only if empty
   if (data.length > 0) {
+    _validateInteractionsSchema(data[0]);
     return;
   }
   
@@ -95,14 +110,17 @@ function initInteractionsSheet() {
     'person_id',
     'occurred_at',
     'topic_tags',
-    'notes'
+    'notes',
+    'notes_audio',
+    'follow_up_hint',
+    'follow_up_note'
   ];
   
   sheet.getRange(1, 1, 1, header.length).setValues([header]);
 }
 
 // ================== PEOPLE ==================
-function addPerson(display_name, privacy_level, notes) {
+function _addPerson(display_name, privacy_level, notes) {
   if (CONTEXT_MEMORY_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
@@ -120,10 +138,10 @@ function addPerson(display_name, privacy_level, notes) {
     throw new Error('privacy_level must be: private, normal, or sensitive');
   }
   
-  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_PEOPLE);
-  initPeopleSheet();
+  const sheet = _getOrCreateSheet(CONTEXT_MEMORY_TAB_PEOPLE);
+  _initPeopleSheet();
   
-  const personId = generatePersonId();
+  const personId = _generatePersonId();
   const now = new Date();
   
   const row = [
@@ -140,8 +158,8 @@ function addPerson(display_name, privacy_level, notes) {
   return personId;
 }
 
-function getPeople() {
-  const sheet = getSheet(CONTEXT_MEMORY_TAB_PEOPLE);
+function _getPeople() {
+  const sheet = _getSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   if (!sheet) {
     return [];
   }
@@ -179,7 +197,7 @@ function getPeople() {
 }
 
 // ================== FACTS ==================
-function addFact(person_id, predicate, object, source, expires_at) {
+function _addFact(person_id, predicate, object, source, expires_at) {
   if (CONTEXT_MEMORY_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
@@ -205,10 +223,10 @@ function addFact(person_id, predicate, object, source, expires_at) {
     throw new Error('source must be: conversation, observation, or manual');
   }
   
-  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_FACTS);
-  initFactsSheet();
+  const sheet = _getOrCreateSheet(CONTEXT_MEMORY_TAB_FACTS);
+  _initFactsSheet();
   
-  const factId = generateFactId();
+  const factId = _generateFactId();
   const now = new Date();
   
   const row = [
@@ -227,8 +245,8 @@ function addFact(person_id, predicate, object, source, expires_at) {
   return factId;
 }
 
-function getActiveFacts(person_id) {
-  const sheet = getSheet(CONTEXT_MEMORY_TAB_FACTS);
+function _getActiveFacts(person_id) {
+  const sheet = _getSheet(CONTEXT_MEMORY_TAB_FACTS);
   if (!sheet) {
     return [];
   }
@@ -284,7 +302,7 @@ function getActiveFacts(person_id) {
 }
 
 // ================== INTERACTIONS ==================
-function addInteraction(person_id, occurred_at, notes, topic_tags) {
+function _addInteraction(person_id, occurred_at, notes, topic_tags, notes_audio, follow_up_hint, follow_up_note) {
   if (CONTEXT_MEMORY_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
@@ -297,10 +315,14 @@ function addInteraction(person_id, occurred_at, notes, topic_tags) {
     throw new Error('occurred_at is required and must be a Date');
   }
   
-  const sheet = getOrCreateSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
-  initInteractionsSheet();
+  const sheet = _getOrCreateSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
+  _initInteractionsSheet();
   
-  const interactionId = generateInteractionId();
+  const data = sheet.getDataRange().getValues();
+  const headerRow = data[0];
+  const schemaVersion = _detectInteractionsSchemaVersion(headerRow);
+  
+  const interactionId = _generateInteractionId();
   
   const row = [
     interactionId,
@@ -310,14 +332,30 @@ function addInteraction(person_id, occurred_at, notes, topic_tags) {
     notes ? String(notes).trim() : ''
   ];
   
+  if (schemaVersion === 'v1.1') {
+    row.push(notes_audio ? String(notes_audio).trim() : '');
+    
+    if (follow_up_hint === true || follow_up_hint === 'TRUE' || follow_up_hint === 'true') {
+      row.push(true);
+    } else {
+      row.push(false);
+    }
+    
+    row.push(follow_up_note ? String(follow_up_note).trim() : '');
+  } else if (schemaVersion === 'v1.0') {
+    if (notes_audio || follow_up_hint || follow_up_note) {
+      throw new Error('Cannot write v1.1 fields to v1.0 schema. Run migrateInteractionsToV1_1() first.');
+    }
+  }
+  
   sheet.appendRow(row);
   
   Logger.log('Added interaction: ' + interactionId);
   return interactionId;
 }
 
-function getInteractions(person_id) {
-  const sheet = getSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
+function _getInteractions(person_id) {
+  const sheet = _getSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
   if (!sheet) {
     return [];
   }
@@ -333,6 +371,9 @@ function getInteractions(person_id) {
   const occurredIdx = headerRow.indexOf('occurred_at');
   const topicTagsIdx = headerRow.indexOf('topic_tags');
   const notesIdx = headerRow.indexOf('notes');
+  const notesAudioIdx = headerRow.indexOf('notes_audio');
+  const followUpHintIdx = headerRow.indexOf('follow_up_hint');
+  const followUpNoteIdx = headerRow.indexOf('follow_up_note');
   
   if (idIdx === -1 || personIdx === -1) {
     return [];
@@ -349,13 +390,28 @@ function getInteractions(person_id) {
       continue;
     }
     
-    interactions.push({
+    const interaction = {
       interaction_id: row[idIdx],
       person_id: interactionPersonId,
       occurred_at: occurredIdx >= 0 ? row[occurredIdx] : null,
       topic_tags: topicTagsIdx >= 0 ? row[topicTagsIdx] : '',
       notes: notesIdx >= 0 ? row[notesIdx] : ''
-    });
+    };
+    
+    if (notesAudioIdx >= 0) {
+      interaction.notes_audio = row[notesAudioIdx] ? String(row[notesAudioIdx]).trim() : '';
+    }
+    
+    if (followUpHintIdx >= 0) {
+      const hintValue = row[followUpHintIdx];
+      interaction.follow_up_hint = hintValue === true || hintValue === 'TRUE' || hintValue === 'true';
+    }
+    
+    if (followUpNoteIdx >= 0) {
+      interaction.follow_up_note = row[followUpNoteIdx] ? String(row[followUpNoteIdx]).trim() : '';
+    }
+    
+    interactions.push(interaction);
   }
   
   // Sort by occurred_at descending (most recent first)
@@ -369,16 +425,16 @@ function getInteractions(person_id) {
 }
 
 // ================== TEST ENTRY POINT ==================
-function runContextSelfTest() {
+function _runContextSelfTest() {
   if (CONTEXT_MEMORY_GUARD) {
     throw new Error("TEMP GUARD: Do not run yet");
   }
   Logger.log('--- CONTEXT MEMORY SELF TEST START ---');
   
-  initContextSheets();
+  _initContextSheets();
   
   // Count PEOPLE rows
-  const peopleSheet = getSheet(CONTEXT_MEMORY_TAB_PEOPLE);
+  const peopleSheet = _getSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   let peopleCount = 0;
   if (peopleSheet) {
     const peopleData = peopleSheet.getDataRange().getValues();
@@ -386,7 +442,7 @@ function runContextSelfTest() {
   }
   
   // Count FACTS rows
-  const factsSheet = getSheet(CONTEXT_MEMORY_TAB_FACTS);
+  const factsSheet = _getSheet(CONTEXT_MEMORY_TAB_FACTS);
   let factsCount = 0;
   if (factsSheet) {
     const factsData = factsSheet.getDataRange().getValues();
@@ -394,7 +450,7 @@ function runContextSelfTest() {
   }
   
   // Count INTERACTIONS rows
-  const interactionsSheet = getSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
+  const interactionsSheet = _getSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
   let interactionsCount = 0;
   if (interactionsSheet) {
     const interactionsData = interactionsSheet.getDataRange().getValues();
@@ -409,38 +465,141 @@ function runContextSelfTest() {
   Logger.log('--- CONTEXT MEMORY SELF TEST END ---');
 }
 
+// ================== SCHEMA VALIDATION ==================
+function _validatePeopleSchema(headerRow) {
+  const expected = ['person_id', 'display_name', 'privacy_level', 'created_at', 'notes'];
+  const actual = headerRow.map(h => String(h || '').trim());
+  
+  if (actual.length !== expected.length) {
+    throw new Error('PEOPLE schema mismatch: expected ' + expected.length + ' columns, found ' + actual.length);
+  }
+  
+  for (let i = 0; i < expected.length; i++) {
+    if (actual[i] !== expected[i]) {
+      throw new Error('PEOPLE schema mismatch: column ' + (i + 1) + ' expected "' + expected[i] + '", found "' + actual[i] + '"');
+    }
+  }
+}
+
+function _validateFactsSchema(headerRow) {
+  const expected = ['fact_id', 'person_id', 'predicate', 'object', 'source', 'created_at', 'expires_at'];
+  const actual = headerRow.map(h => String(h || '').trim());
+  
+  if (actual.length !== expected.length) {
+    throw new Error('FACTS schema mismatch: expected ' + expected.length + ' columns, found ' + actual.length);
+  }
+  
+  for (let i = 0; i < expected.length; i++) {
+    if (actual[i] !== expected[i]) {
+      throw new Error('FACTS schema mismatch: column ' + (i + 1) + ' expected "' + expected[i] + '", found "' + actual[i] + '"');
+    }
+  }
+}
+
+function _validateInteractionsSchema(headerRow) {
+  const version = _detectInteractionsSchemaVersion(headerRow);
+  if (version === null) {
+    throw new Error('INTERACTIONS schema mismatch: sheet does not match v1.0 or v1.1 schema');
+  }
+}
+
+function _detectInteractionsSchemaVersion(headerRow) {
+  const actual = headerRow.map(h => String(h || '').trim());
+  
+  const v1_0 = ['interaction_id', 'person_id', 'occurred_at', 'topic_tags', 'notes'];
+  const v1_1 = ['interaction_id', 'person_id', 'occurred_at', 'topic_tags', 'notes', 'notes_audio', 'follow_up_hint', 'follow_up_note'];
+  
+  if (actual.length === v1_0.length) {
+    let matches = true;
+    for (let i = 0; i < v1_0.length; i++) {
+      if (actual[i] !== v1_0[i]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return 'v1.0';
+    }
+  }
+  
+  if (actual.length === v1_1.length) {
+    let matches = true;
+    for (let i = 0; i < v1_1.length; i++) {
+      if (actual[i] !== v1_1[i]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return 'v1.1';
+    }
+  }
+  
+  return null;
+}
+
+// ================== MIGRATION ==================
+function migrateInteractionsToV1_1() {
+  if (CONTEXT_MEMORY_GUARD) {
+    throw new Error("TEMP GUARD: Do not run yet");
+  }
+  
+  Logger.log('--- INTERACTIONS MIGRATION TO V1.1 START ---');
+  
+  const sheet = _getOrCreateSheet(CONTEXT_MEMORY_TAB_INTERACTIONS);
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length === 0) {
+    Logger.log('Sheet is empty. Initializing with v1.1 schema.');
+    _initInteractionsSheet();
+    Logger.log('--- INTERACTIONS MIGRATION TO V1.1 END (INITIALIZED) ---');
+    return;
+  }
+  
+  const headerRow = data[0];
+  const version = _detectInteractionsSchemaVersion(headerRow);
+  
+  if (version === 'v1.1') {
+    Logger.log('Sheet already at v1.1. No migration needed.');
+    Logger.log('--- INTERACTIONS MIGRATION TO V1.1 END (ALREADY V1.1) ---');
+    return;
+  }
+  
+  if (version !== 'v1.0') {
+    throw new Error('Cannot migrate: sheet does not match v1.0 schema. Current schema is unrecognized.');
+  }
+  
+  Logger.log('Detected v1.0 schema. Appending new columns...');
+  
+  const newColumns = ['notes_audio', 'follow_up_hint', 'follow_up_note'];
+  const currentColCount = headerRow.length;
+  
+  for (let i = 0; i < newColumns.length; i++) {
+    const colIndex = currentColCount + i + 1;
+    sheet.getRange(1, colIndex).setValue(newColumns[i]);
+  }
+  
+  Logger.log('Migration complete. Sheet is now v1.1.');
+  Logger.log('--- INTERACTIONS MIGRATION TO V1.1 END (SUCCESS) ---');
+}
+
 // ================== HELPERS ==================
-function generatePersonId() {
+function _generatePersonId() {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000);
   return 'PERSON-' + timestamp + '-' + random;
 }
 
-function generateFactId() {
+function _generateFactId() {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000);
   return 'FACT-' + timestamp + '-' + random;
 }
 
-function generateInteractionId() {
+function _generateInteractionId() {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000);
   return 'INT-' + timestamp + '-' + random;
 }
 
-function getSheet(name) {
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName(name);
-  return sheet;
-}
-
-function getOrCreateSheet(name) {
-  const ss = SpreadsheetApp.getActive();
-  let sheet = ss.getSheetByName(name);
-  
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-  }
-  
-  return sheet;
-}
+// _getSheet and _getOrCreateSheet are defined in personal_os_v2.js

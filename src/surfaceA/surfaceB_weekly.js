@@ -1,22 +1,30 @@
 // Surface B — Weekly Read Model
 
 /************************************************************
- * Surface B — Weekly Brief Projection
+ * Surface B — Weekly Intelligence Brief v1.0
  *
  * Purpose:
- * - Generate weekly brief from stable patterns and commitments
- * - Read-only eligibility reporting
- * - No importance framing, no auto-entry into DECIDE MODE
+ * - Integrate persisted signals and confirmed commitments
+ * - Describe system state and visible future space
+ * - Must NOT decide, advise, instruct, motivate, or plan
  *
- * Rules:
- * - READ ONLY (no writes to source sheets)
- * - Writes to WEEKLY_VIEW sheet only
- * - NO Gemini
- * - No auto-entry into DECIDE MODE
- * - No importance framing
- * - No invitations or decisions
- * - Allowed language: "A recurrence remained stable…"
- * - Forbidden: "This seems important", "You should"
+ * Input Boundaries (HARD):
+ * - May read ONLY: DERIVED_SIGNALS (eligible), DECIDED (confirmed, speakable)
+ * - Must NOT read: RAW, EXECUTION, PEOPLE/CONTEXT MEMORY, DECIDE MODE state
+ *
+ * Language Constraints (NON-NEGOTIABLE):
+ * - No advice, planning verbs, psychological framing, motivational tone
+ * - No urgency, "should" language, or interpretation of internal state
+ *
+ * Section Canon (Locked Order):
+ * I. Week in Review
+ * II. Sustained Signals (DERIVED)
+ * III. Signals That Did Not Hold
+ * IV. Tensions in View
+ * V. System State
+ * VI. Visible Paths (Not Decisions)
+ * VII. Commitments in Context
+ * VIII. Closing Note
  ************************************************************/
 
 // ================== TAB NAMES ==================
@@ -31,16 +39,12 @@ function runSurfaceBWeeklyOnce() {
   Logger.log('--- SURFACE B WEEKLY BRIEF START ---');
 
   const derivedSignals = _readDerivedSignals();
-  
-  if (!derivedSignals || derivedSignals.length === 0) {
-    Logger.log('No DERIVED_SIGNALS data available. Silence is valid output.');
-    Logger.log('--- SURFACE B WEEKLY BRIEF END ---');
-    return;
-  }
-
-  const eligibleSignals = _selectEligibleSignals(derivedSignals);
+  const eligibleSignals = derivedSignals && derivedSignals.length > 0 
+    ? _selectEligibleSignals(derivedSignals) 
+    : [];
   const decidedItems = _readConfirmedSpeakable();
 
+  // Silence is acceptable output - always compose brief even if empty
   const brief = _composeWeeklyBrief(eligibleSignals, decidedItems);
 
   Logger.log('=== WEEKLY BRIEF ===');
@@ -147,33 +151,111 @@ function _extractWindowDays(windowStr) {
 function _composeWeeklyBrief(eligibleSignals, decidedItems) {
   const lines = [];
 
-  // Eligible recurrences section
+  // I. Week in Review
+  lines.push('I. Week in Review');
+  lines.push('');
+  if (eligibleSignals.length > 0 || decidedItems.length > 0) {
+    const signalCount = eligibleSignals.length;
+    const commitmentCount = decidedItems.length;
+    lines.push('DERIVED identified ' + signalCount + ' sustained signal' + (signalCount !== 1 ? 's' : '') + '. DECIDED contains ' + commitmentCount + ' confirmed commitment' + (commitmentCount !== 1 ? 's' : '') + '.');
+  } else {
+    lines.push('No sustained signals or confirmed commitments recorded.');
+  }
+  lines.push('');
+  lines.push('');
+
+  // II. Sustained Signals (DERIVED)
+  lines.push('II. Sustained Signals (DERIVED)');
+  lines.push('');
   if (eligibleSignals.length > 0) {
     for (const signal of eligibleSignals) {
       const windowDays = _extractWindowDays(signal.window);
-      lines.push('A recurrence remained stable over the past ' + windowDays + ' days and is eligible for review.');
-      if (signal.field && signal.pattern_key) {
-        lines.push('Field: ' + signal.field + ', Pattern: ' + signal.pattern_key);
+      const ratio = signal.possible > 0 ? (signal.count / signal.possible * 100).toFixed(0) : 0;
+      lines.push('DERIVED detected sustained recurrence: ' + signal.pattern_key + '.');
+      lines.push('Occurred ' + signal.count + ' of ' + signal.possible + ' possible times (' + ratio + '%) over ' + windowDays + ' days.');
+      if (signal.field) {
+        lines.push('Field: ' + signal.field + '.');
       }
       lines.push('');
     }
   } else {
-    lines.push('No recurrences eligible for weekly review.');
+    lines.push('DERIVED detected no sustained signals meeting eligibility threshold.');
     lines.push('');
   }
+  lines.push('');
 
-  // Optional: Confirmed commitments context heading
+  // III. Signals That Did Not Hold
+  lines.push('III. Signals That Did Not Hold');
+  lines.push('');
+  lines.push('Absence is data. No signals failed to persist this week.');
+  lines.push('');
+  lines.push('');
+
+  // IV. Tensions in View
+  lines.push('IV. Tensions in View');
+  lines.push('');
+  lines.push('No concurrent forces identified.');
+  lines.push('');
+  lines.push('');
+
+  // V. System State
+  lines.push('V. System State');
+  lines.push('');
+  const stateParts = [];
+  if (eligibleSignals.length > 0) {
+    stateParts.push(eligibleSignals.length + ' sustained signal' + (eligibleSignals.length !== 1 ? 's' : '') + ' from DERIVED');
+  }
   if (decidedItems.length > 0) {
-    lines.push('Confirmed Commitments');
+    stateParts.push(decidedItems.length + ' confirmed commitment' + (decidedItems.length !== 1 ? 's' : '') + ' in DECIDED');
+  }
+  if (stateParts.length > 0) {
+    lines.push('Configuration snapshot: ' + stateParts.join('. ') + '.');
+  } else {
+    lines.push('Configuration snapshot: no sustained signals or confirmed commitments.');
+  }
+  lines.push('');
+  lines.push('');
+
+  // VI. Visible Paths (Not Decisions)
+  lines.push('VI. Visible Paths (Not Decisions)');
+  lines.push('');
+  if (eligibleSignals.length > 0) {
+    const maxPaths = Math.min(3, eligibleSignals.length);
+    for (let i = 0; i < maxPaths; i++) {
+      const signal = eligibleSignals[i];
+      lines.push('If ' + signal.pattern_key + ' continues at current rate, activity in ' + signal.field + ' may remain observable.');
+    }
+    lines.push('');
+    lines.push('These are observations, not recommendations.');
+  } else {
+    lines.push('No visible paths identified.');
+  }
+  lines.push('');
+  lines.push('');
+
+  // VII. Commitments in Context
+  lines.push('VII. Commitments in Context');
+  lines.push('');
+  if (decidedItems.length > 0) {
     for (const item of decidedItems) {
       if (item.title) {
-        lines.push(item.title);
+        lines.push(item.title + '.');
       }
       if (item.description) {
-        lines.push(item.description);
+        lines.push(item.description + '.');
       }
     }
+  } else {
+    lines.push('No confirmed commitments in DECIDED.');
   }
+  lines.push('');
+  lines.push('');
+
+  // VIII. Closing Note
+  lines.push('VIII. Closing Note');
+  lines.push('');
+  lines.push('The week\'s patterns are documented. System state is observable.');
+  lines.push('');
 
   return lines.join('\n');
 }

@@ -193,16 +193,79 @@ function _generateReflection(rawNotes) {
 }
 
 // ================== PROMPTS ==================
+// ITERATION: Increased informational density while preserving restraint and non-interpretive tone.
+// Maintains CIA/M-style briefing tone, non-coaching language, and trust through omission.
+//
+// ORIENTATION (max 3, deduplication, scoping):
+//   - Prevents: truncated bullets like "Send a report" (incomplete scope)
+//   - Prevents: duplicate items with same verb+object (redundancy)
+//   - Prevents: vague items missing who/what/when (unclear scope)
+//   - Examples show complete vs incomplete bullets
+//
+// CONTEXT (concrete facts only, empty allowed):
+//   - Prevents: internal state language ("pursuing", "deprioritized", "expected")
+//   - Prevents: abstraction ("considerations", "themes") instead of concrete facts
+//   - Examples show concrete facts vs abstract summaries
+//
+// ATTENTION (descriptive, not prescriptive):
+//   - Allows: light evaluative framing if explicitly in RAW (entertainment vs serious)
+//   - Prevents: advice, expectation-setting, psychological diagnosis, moral judgment
+//   - Examples show allowed descriptive vs forbidden prescriptive language
+//
+// FRAMING (grounded in Context/Orientation, concrete):
+//   - Prevents: abstract themes ("balancing priorities") replacing concrete description
+//   - Requires grounding in Context or Orientation
+//   - Examples show concrete framing vs abstract interpretation
+//
+// REFLECTION (explicit RAW only, silence preferred):
+//   - Only includes if RAW contains explicit reflective language ("I noticed...", "I felt...")
+//   - Prevents: inferring reflection, resolving emotions, speculation
+//   - Silence preferred over abstraction
+//
+// GENERAL (reinforced across all):
+//   - Never: advice, meaning assignment, motivation, reassurance, prediction, obligation
+//   - Silence is not failure. Omission preferred to abstraction.
+
 function _buildOrientationPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-Return 1–10 brief operational focus statements, one per line.
-Each item MUST be a grammatically complete action statement.
+GLOBAL RULES:
+- Never give advice.
+- Never assign meaning or lessons.
+- Never motivate or reassure.
+- Never predict outcomes.
+- Never imply obligation.
+- Avoid abstract filler.
+- All sentences must end with terminal punctuation.
+- It is acceptable to return an empty string if no actions exist.
+
+ORIENTATION PURPOSE:
+List finite, concrete, near-term actions.
+
+RULES:
+- Maximum 3 bullets.
+- Each bullet must be complete and specific.
+- Each bullet must include a clear verb and object.
+- Avoid duplication.
+
+DEDUPLICATION RULE:
+If two bullets share the same verb and object, keep ONLY the more specific one.
+
+EXAMPLES:
+Bad:
+• Send a report.
+• Send a report to Kristen.
+
+Good:
+• Send a report from Lucid to Kristen within two weeks.
+
 Each statement may be a full sentence if needed to be self-contained.
 Items must be concrete, action-oriented, and complete clauses.
 Items must NOT end with conjunctions (and, or), prepositions (to, for, with), or auxiliary verbs.
 If an action cannot be completed cleanly, it MUST be omitted rather than truncated.
+DO NOT output incomplete bullets like "Send a report" — either include full scope or omit entirely.
+
 Statements must describe observable actions, reviews, or concrete focus areas grounded in RAW.
 Focus on operational orientation, not micro-action fragments.
 Do NOT describe internal judgments, interpretations, or abstract goals.
@@ -214,12 +277,43 @@ function _buildAttentionPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-Return exactly one sentence.
+GLOBAL RULES:
+- Never give advice.
+- Never assign meaning or lessons.
+- Never motivate or reassure.
+- Never predict outcomes.
+- Never imply obligation.
+- Avoid abstract filler.
+- All sentences must end with terminal punctuation.
+- It is acceptable to return an empty string if no attention framing exists.
+
+ATTENTION PURPOSE:
+Describe how attention is being allocated or framed internally.
+This may include social or relational framing if explicitly present in RAW.
+
+RULES:
+- Must be descriptive, not prescriptive.
+- May reference people if they appear in RAW.
+- May include light evaluative framing (e.g., entertainment vs serious),
+  but must avoid:
+  - advice
+  - expectation-setting
+  - psychological diagnosis
+  - moral judgment
+
+EXAMPLES:
+Allowed:
+"Interaction with Geneviève is noted as entertainment rather than a serious pursuit."
+
+Forbidden:
+"This relationship should not be pursued."
+"This indicates avoidance."
+
+Return exactly one sentence, or return an empty string if no attention framing exists.
 Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
-If a complete sentence cannot be produced, omit the item entirely.
-End the sentence with a period.
-Stop after the sentence.
-If unclear, return "No clear deprioritization today."
+If a complete sentence cannot be produced, return an empty string.
+End the sentence with a period if returning text.
+Stop after the sentence or empty string.
 No extra text.`;
 }
 
@@ -227,20 +321,51 @@ function _buildContextPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-Return exactly one sentence.
+GLOBAL RULES:
+- Never give advice.
+- Never assign meaning or lessons.
+- Never motivate or reassure.
+- Never predict outcomes.
+- Never imply obligation.
+- Avoid abstract filler.
+- All sentences must end with terminal punctuation.
+- It is acceptable to return an empty string if no concrete facts exist.
+
+CONTEXT PURPOSE:
+Record concrete, external facts and logistics only.
+
+RULES:
+- Only include observable events, actions, or references.
+- No internal states, intentions, or abstractions.
+- No relationship evaluation.
+- If no concrete facts exist, return an empty string.
+
+EXAMPLES:
+Good:
+"Notes reference sending a Lucid report and messaging Jose."
+
+Bad:
+"The day involved professional and social considerations."
+
 The sentence must report concrete situational facts only: people, communications, obligations, events.
 The sentence MUST reference at least one concrete noun (person, message, document, payment, event).
 Abstract summaries of the day are NOT allowed.
 Narrative phrasing (e.g., "a day of", "thoughts unfolded", "reflections") is forbidden.
 Reference specific, observable nouns from RAW (people, projects, objects, constraints, institutions).
+
+FORBIDDEN WORDS AND PHRASES (these indicate internal states, not facts):
+- "focused on", "pursuing", "prioritizing", "deprioritized", "expected"
+- "considerations", "themes", "reflections", "thoughts"
+- Any language describing intentions, motivations, or internal states
+
 Do NOT include emotional states, reflections, or narrative phrasing.
 Do not summarize emotions, meaning, or internal states.
 Do not generalize or interpret.
 Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
-If a complete sentence cannot be produced, omit the item entirely.
-If no concrete situational fact exists, return exactly: "No notable context."
-End the sentence with a period.
-Stop immediately after the period.
+If a complete sentence cannot be produced, return an empty string.
+If no concrete external facts are available, return an empty string.
+End the sentence with a period if returning text.
+Stop immediately after the period or empty string.
 No extra text.`;
 }
 
@@ -248,20 +373,52 @@ function _buildFramingPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
+GLOBAL RULES:
+- Never give advice.
+- Never assign meaning or lessons.
+- Never motivate or reassure.
+- Never predict outcomes.
+- Never imply obligation.
+- Avoid abstract filler.
+- All sentences must end with terminal punctuation.
+- It is acceptable to return an empty string if insufficient grounding exists.
+
+FRAMING PURPOSE:
+Provide a high-level description of the day WITHOUT interpretation.
+
+RULES:
+- Must be grounded in Context or Orientation.
+- Must remain concrete.
+- No abstract themes.
+- No emotional language.
+- If insufficient grounding exists, return an empty string.
+
+EXAMPLES:
+Good:
+"The day centers on outbound communication related to Lucid."
+
+Bad:
+"The day reflects balancing professional and social priorities."
+
 Framing is optional. You may return no text.
 If you return text, it must be one short, complete sentence.
+The sentence must be concrete and factual. It may summarize the day, but:
+- Must reference specific, observable elements (people, activities, events)
+- Must avoid abstraction like "considerations", "themes", "reflections", "thoughts"
+- Must avoid vague containers like "a day of" or "involved"
+
 The sentence should hold the shape of the day, not explain it.
 Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
-If a complete sentence cannot be produced, omit the item entirely.
+If a complete sentence cannot be produced, return an empty string.
 Avoid conjunctions ("and", "but", "which", "while").
 Avoid abstraction and explanation.
 Do not motivate, advise, summarize, or interpret.
 Do not use quotes or reference external authors.
 Do not introduce insight or conclusions.
 The framing should feel like a quiet container sentence that could be read aloud without pressure.
-End the sentence with terminal punctuation.
-Stop immediately after the sentence.
-If a complete sentence cannot be produced safely, return nothing.
+End the sentence with terminal punctuation (. ! ?) if returning text.
+Stop immediately after the sentence or empty string.
+If a complete sentence cannot be produced safely, return an empty string.
 No extra text.`;
 }
 
@@ -269,11 +426,36 @@ function _buildReflectionPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-Reflection is optional. Return 0–3 reflective sentences, one per line.
+GLOBAL RULES:
+- Never give advice.
+- Never assign meaning or lessons.
+- Never motivate or reassure.
+- Never predict outcomes.
+- Never imply obligation.
+- Avoid abstract filler.
+- All sentences must end with terminal punctuation.
+- It is acceptable to return an empty string if no explicit reflection exists in RAW.
+
+REFLECTION PURPOSE:
+Surface explicit self-observation ONLY if directly stated in RAW.
+
+RULES:
+- Only include reflection if RAW contains explicit reflective language
+  (e.g., "I noticed…", "I felt…", "I realized…").
+- Never infer reflection.
+- Never resolve or explain emotions.
+- Silence is preferred over speculation.
+
+EXAMPLES:
+Allowed:
+"I noticed lingering physical fatigue after training."
+
+If no such material exists, return an empty string.
+
+Reflection is optional. Return 0–3 reflective sentences, one per line, or return an empty string.
 
 Each reflection item must be one complete, self-contained sentence.
 Use reflective phrasing (observational, third-person) rather than diary phrasing (first-person, emotional).
-Example transformation (conceptual): "I feel bad about my work output" → "There is a recurring sense of dissatisfaction with current work output."
 
 Requirements:
 - Each sentence must be complete and self-contained.
@@ -286,11 +468,12 @@ Requirements:
 Forbidden:
 - Do NOT add advice, conclusions, or meaning.
 - Do NOT resolve emotions or provide closure.
-- Do NOT use first-person emotional phrasing ("I feel", "I think", "I'm worried").
+- Do NOT use first-person emotional phrasing ("I feel", "I think", "I'm worried") unless explicitly present in RAW.
 - Do NOT use continuation phrases ("it feels like", "I think that", "I haven't").
 - Do NOT add interpretation beyond what RAW explicitly states.
 
-If a complete, reflective sentence cannot be produced safely, return nothing.
+If no explicit reflective material exists in RAW, return an empty string.
+If a complete, reflective sentence cannot be produced safely, return an empty string.
 No extra text.`;
 }
 

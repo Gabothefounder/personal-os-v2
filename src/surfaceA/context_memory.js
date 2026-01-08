@@ -223,6 +223,12 @@ function createPerson(displayName, privacyLevel, notes) {
   return personId;
 }
 
+function openPeopleSidebar() {
+  const html = HtmlService.createHtmlOutputFromFile('people_sidebar')
+    .setTitle('Add Person');
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
 function listPeople() {
   const sheet = _getSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   if (!sheet) {

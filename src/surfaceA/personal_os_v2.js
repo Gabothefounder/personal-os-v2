@@ -69,6 +69,30 @@ function appendRawNote(text) {
   sheet.appendRow([now, processedText]);
 }
 
+function createRawEntry(text) {
+  if (!text || typeof text !== 'string') {
+    return;
+  }
+  
+  const trimmedText = text.trim();
+  if (trimmedText.length === 0) {
+    return;
+  }
+  
+  const sheet = _getOrCreateSheet(SURFACEA_TAB_RAW);
+  
+  // Check if sheet has headers
+  const data = sheet.getDataRange().getValues();
+  if (data.length === 0 || (data.length === 1 && data[0][0] !== 'timestamp')) {
+    // Write headers if sheet is empty or missing headers
+    sheet.getRange(1, 1, 1, 2).setValues([['timestamp', 'note']]);
+  }
+  
+  // Append row with timestamp and trimmed note
+  const now = new Date();
+  sheet.appendRow([now, trimmedText]);
+}
+
 // ================== SURFACE B HELPERS ==================
 function _readConfirmedSpeakable() {
   try {

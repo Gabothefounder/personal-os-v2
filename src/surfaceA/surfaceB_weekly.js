@@ -1,6 +1,3 @@
-// TEMP EXECUTION GUARD — REMOVE AFTER VALIDATION
-const SURFACEB_WEEKLY_GUARD = false;
-
 // Surface B — Weekly Read Model
 
 /************************************************************
@@ -31,12 +28,9 @@ const WEEKLY_ELIGIBILITY_THRESHOLD = 0.4; // 40% recurrence rate
 
 // ================== ENTRY POINT ==================
 function runSurfaceBWeeklyOnce() {
-  if (SURFACEB_WEEKLY_GUARD) {
-    throw new Error("TEMP GUARD: Do not run yet");
-  }
   Logger.log('--- SURFACE B WEEKLY BRIEF START ---');
 
-  const derivedSignals = readDerivedSignals();
+  const derivedSignals = _readDerivedSignals();
   
   if (!derivedSignals || derivedSignals.length === 0) {
     Logger.log('No DERIVED_SIGNALS data available. Silence is valid output.');
@@ -44,23 +38,23 @@ function runSurfaceBWeeklyOnce() {
     return;
   }
 
-  const eligibleSignals = selectEligibleSignals(derivedSignals);
-  const decidedItems = readConfirmedSpeakable();
+  const eligibleSignals = _selectEligibleSignals(derivedSignals);
+  const decidedItems = _readConfirmedSpeakable();
 
-  const brief = composeWeeklyBrief(eligibleSignals, decidedItems);
+  const brief = _composeWeeklyBrief(eligibleSignals, decidedItems);
 
   Logger.log('=== WEEKLY BRIEF ===');
   Logger.log(brief);
   Logger.log('=== END WEEKLY BRIEF ===');
 
-  writeWeeklyView(brief);
+  _writeWeeklyView(brief);
 
   Logger.log('--- SURFACE B WEEKLY BRIEF END ---');
 }
 
 // ================== READ SOURCES ==================
-function readDerivedSignals() {
-  const sheet = getSheet(SURFACEB_WEEKLY_TAB_DERIVED);
+function _readDerivedSignals() {
+  const sheet = _getSheet(SURFACEB_WEEKLY_TAB_DERIVED);
   if (!sheet) {
     return null;
   }
@@ -106,24 +100,13 @@ function readDerivedSignals() {
   return signals;
 }
 
-function readConfirmedSpeakable() {
-  try {
-    // Call listConfirmedSpeakable from decided_ledger.js
-    if (typeof listConfirmedSpeakable === 'function') {
-      return listConfirmedSpeakable();
-    }
-  } catch (e) {
-    Logger.log('Could not read DECIDED items: ' + e.message);
-  }
-  return [];
-}
 
 // ================== SELECT ELIGIBLE SIGNALS ==================
-function selectEligibleSignals(signals) {
+function _selectEligibleSignals(signals) {
   const eligible = [];
 
   for (const signal of signals) {
-    const windowDays = extractWindowDays(signal.window);
+      const windowDays = _extractWindowDays(signal.window);
     
     // Window must be 7-14 days
     if (windowDays < 7 || windowDays > 14) {
@@ -146,7 +129,7 @@ function selectEligibleSignals(signals) {
   return eligible;
 }
 
-function extractWindowDays(windowStr) {
+function _extractWindowDays(windowStr) {
   if (!windowStr) {
     return 0;
   }
@@ -161,13 +144,13 @@ function extractWindowDays(windowStr) {
 }
 
 // ================== COMPOSE BRIEF ==================
-function composeWeeklyBrief(eligibleSignals, decidedItems) {
+function _composeWeeklyBrief(eligibleSignals, decidedItems) {
   const lines = [];
 
   // Eligible recurrences section
   if (eligibleSignals.length > 0) {
     for (const signal of eligibleSignals) {
-      const windowDays = extractWindowDays(signal.window);
+      const windowDays = _extractWindowDays(signal.window);
       lines.push('A recurrence remained stable over the past ' + windowDays + ' days and is eligible for review.');
       if (signal.field && signal.pattern_key) {
         lines.push('Field: ' + signal.field + ', Pattern: ' + signal.pattern_key);
@@ -196,8 +179,8 @@ function composeWeeklyBrief(eligibleSignals, decidedItems) {
 }
 
 // ================== WRITE OUTPUT ==================
-function writeWeeklyView(text) {
-  const sheet = getOrCreateSheet('WEEKLY_VIEW');
+function _writeWeeklyView(text) {
+  const sheet = _getOrCreateSheet('WEEKLY_VIEW');
   sheet.clearContents();
 
   const now = new Date();
@@ -211,19 +194,4 @@ function writeWeeklyView(text) {
 }
 
 // ================== HELPERS ==================
-function getSheet(name) {
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName(name);
-  return sheet;
-}
-
-function getOrCreateSheet(name) {
-  const ss = SpreadsheetApp.getActive();
-  let sheet = ss.getSheetByName(name);
-
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-  }
-
-  return sheet;
-}
+// _getSheet and _getOrCreateSheet are defined in personal_os_v2.js

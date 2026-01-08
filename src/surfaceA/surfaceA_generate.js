@@ -20,7 +20,7 @@ function runDailySynthesis() {
   Logger.log('--- DAILY SYNTHESIS START ---');
 
   // TODO: Use last_successful_run_at boundary for incremental input
-  const rawNotes = getRecentRawNotes(20);
+  const rawNotes = _getRecentRawNotes(20);
   Logger.log('RAW NOTES COUNT: ' + rawNotes.length);
 
   if (rawNotes.length === 0) {
@@ -30,11 +30,11 @@ function runDailySynthesis() {
 
   let substrate;
   try {
-    const orientation = generateOrientation(rawNotes);
-    const attention = generateAttention(rawNotes);
-    const context = generateContext(rawNotes);
-    const framing = generateFraming(rawNotes);
-    const reflection = generateReflection(rawNotes);
+    const orientation = _generateOrientation(rawNotes);
+    const attention = _generateAttention(rawNotes);
+    const context = _generateContext(rawNotes);
+    const framing = _generateFraming(rawNotes);
+    const reflection = _generateReflection(rawNotes);
 
     substrate = {
       orientation,
@@ -49,18 +49,21 @@ function runDailySynthesis() {
     return;
   }
 
-  writeSurfaceASubstrate(substrate, 'SUCCESS');
+  _writeSurfaceASubstrate(substrate, 'SUCCESS');
+
+  // Surface B Daily runs automatically after successful Surface A synthesis
+  try {
+    runSurfaceBDailyOnce();
+  } catch (e) {
+    // Surface B failure does not affect Surface A success
+    Logger.log('Surface B Daily failed (non-fatal): ' + e.message);
+  }
 
   Logger.log('--- DAILY SYNTHESIS END ---');
 }
 
 // ================== GEMINI CALL ==================
-function callGemini(promptText) {
-  // TEMPORARY DEBUG: Verify request integrity
-  Logger.log('DEBUG: promptText defined: ' + (typeof promptText !== 'undefined'));
-  Logger.log('DEBUG: typeof promptText: ' + typeof promptText);
-  Logger.log('DEBUG: promptText.length: ' + (promptText ? promptText.length : 'N/A'));
-
+function _callGemini(promptText) {
   const apiKey = PropertiesService
     .getScriptProperties()
     .getProperty('GEMINI_API_KEY');
@@ -113,113 +116,186 @@ function callGemini(promptText) {
 }
 
 // ================== FIELD GENERATION ==================
-function generateOrientation(rawNotes) {
-  const prompt = buildOrientationPrompt(rawNotes);
+function _generateOrientation(rawNotes) {
+  const prompt = _buildOrientationPrompt(rawNotes);
   Logger.log('ORIENTATION PROMPT BUILT');
 
-  const aiText = callGemini(prompt);
+  const aiText = _callGemini(prompt);
   Logger.log('=== ORIENTATION OUTPUT START ===');
   Logger.log(aiText);
   Logger.log('=== ORIENTATION OUTPUT END ===');
 
-  return parseOrientation(aiText);
+  return _parseOrientation(aiText);
 }
 
-function generateAttention(rawNotes) {
-  const prompt = buildAttentionPrompt(rawNotes);
-  Logger.log('ATTENTION PROMPT BUILT');
+function _generateAttention(rawNotes) {
+  try {
+    const prompt = _buildAttentionPrompt(rawNotes);
+    Logger.log('ATTENTION PROMPT BUILT');
 
-  const aiText = callGemini(prompt);
-  Logger.log('=== ATTENTION OUTPUT START ===');
-  Logger.log(aiText);
-  Logger.log('=== ATTENTION OUTPUT END ===');
+    const aiText = _callGemini(prompt);
+    Logger.log('=== ATTENTION OUTPUT START ===');
+    Logger.log(aiText);
+    Logger.log('=== ATTENTION OUTPUT END ===');
 
-  return parseStringField(aiText, 'attention');
+    return _parseStringField(aiText, 'attention');
+  } catch (e) {
+    return '';
+  }
 }
 
-function generateContext(rawNotes) {
-  const prompt = buildContextPrompt(rawNotes);
-  Logger.log('CONTEXT PROMPT BUILT');
+function _generateContext(rawNotes) {
+  try {
+    const prompt = _buildContextPrompt(rawNotes);
+    Logger.log('CONTEXT PROMPT BUILT');
 
-  const aiText = callGemini(prompt);
-  Logger.log('=== CONTEXT OUTPUT START ===');
-  Logger.log(aiText);
-  Logger.log('=== CONTEXT OUTPUT END ===');
+    const aiText = _callGemini(prompt);
+    Logger.log('=== CONTEXT OUTPUT START ===');
+    Logger.log(aiText);
+    Logger.log('=== CONTEXT OUTPUT END ===');
 
-  return parseStringField(aiText, 'context');
+    return _parseStringField(aiText, 'context');
+  } catch (e) {
+    return '';
+  }
 }
 
-function generateFraming(rawNotes) {
-  const prompt = buildFramingPrompt(rawNotes);
-  Logger.log('FRAMING PROMPT BUILT');
+function _generateFraming(rawNotes) {
+  try {
+    const prompt = _buildFramingPrompt(rawNotes);
+    Logger.log('FRAMING PROMPT BUILT');
 
-  const aiText = callGemini(prompt);
-  Logger.log('=== FRAMING OUTPUT START ===');
-  Logger.log(aiText);
-  Logger.log('=== FRAMING OUTPUT END ===');
+    const aiText = _callGemini(prompt);
+    Logger.log('=== FRAMING OUTPUT START ===');
+    Logger.log(aiText);
+    Logger.log('=== FRAMING OUTPUT END ===');
 
-  return parseStringField(aiText, 'framing');
+    return _parseStringField(aiText, 'framing');
+  } catch (e) {
+    return '';
+  }
 }
 
-function generateReflection(rawNotes) {
-  const prompt = buildReflectionPrompt(rawNotes);
-  Logger.log('REFLECTION PROMPT BUILT');
+function _generateReflection(rawNotes) {
+  try {
+    const prompt = _buildReflectionPrompt(rawNotes);
+    Logger.log('REFLECTION PROMPT BUILT');
 
-  const aiText = callGemini(prompt);
-  Logger.log('=== REFLECTION OUTPUT START ===');
-  Logger.log(aiText);
-  Logger.log('=== REFLECTION OUTPUT END ===');
+    const aiText = _callGemini(prompt);
+    Logger.log('=== REFLECTION OUTPUT START ===');
+    Logger.log(aiText);
+    Logger.log('=== REFLECTION OUTPUT END ===');
 
-  return parseReflection(aiText);
+    return _parseReflection(aiText);
+  } catch (e) {
+    return [];
+  }
 }
 
 // ================== PROMPTS ==================
-function buildOrientationPrompt(rawNotes) {
+function _buildOrientationPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-Return 1–5 short items, one per line.
-Items must describe observable actions, reviews, or concrete focus areas.
-Do NOT describe internal judgments, relationship evaluations, or abstract life goals.
+Return 1–10 brief operational focus statements, one per line.
+Each item MUST be a grammatically complete action statement.
+Each statement may be a full sentence if needed to be self-contained.
+Items must be concrete, action-oriented, and complete clauses.
+Items must NOT end with conjunctions (and, or), prepositions (to, for, with), or auxiliary verbs.
+If an action cannot be completed cleanly, it MUST be omitted rather than truncated.
+Statements must describe observable actions, reviews, or concrete focus areas grounded in RAW.
+Focus on operational orientation, not micro-action fragments.
+Do NOT describe internal judgments, interpretations, or abstract goals.
+Do NOT add prioritization, advice, or interpretation.
 No numbering, bullets, or extra text.`;
 }
 
-function buildAttentionPrompt(rawNotes) {
+function _buildAttentionPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-Return one sentence. If unclear, return "No clear deprioritization today."
+Return exactly one sentence.
+Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
+If a complete sentence cannot be produced, omit the item entirely.
+End the sentence with a period.
+Stop after the sentence.
+If unclear, return "No clear deprioritization today."
 No extra text.`;
 }
 
-function buildContextPrompt(rawNotes) {
+function _buildContextPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-Return one sentence. If none, return "No notable context."
+Return exactly one sentence.
+The sentence must report concrete situational facts only: people, communications, obligations, events.
+The sentence MUST reference at least one concrete noun (person, message, document, payment, event).
+Abstract summaries of the day are NOT allowed.
+Narrative phrasing (e.g., "a day of", "thoughts unfolded", "reflections") is forbidden.
+Reference specific, observable nouns from RAW (people, projects, objects, constraints, institutions).
+Do NOT include emotional states, reflections, or narrative phrasing.
+Do not summarize emotions, meaning, or internal states.
+Do not generalize or interpret.
+Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
+If a complete sentence cannot be produced, omit the item entirely.
+If no concrete situational fact exists, return exactly: "No notable context."
+End the sentence with a period.
+Stop immediately after the period.
 No extra text.`;
 }
 
-function buildFramingPrompt(rawNotes) {
+function _buildFramingPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-Return one neutral sentence.
+Framing is optional. You may return no text.
+If you return text, it must be one short, complete sentence.
+The sentence should hold the shape of the day, not explain it.
+Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
+If a complete sentence cannot be produced, omit the item entirely.
+Avoid conjunctions ("and", "but", "which", "while").
+Avoid abstraction and explanation.
+Do not motivate, advise, summarize, or interpret.
+Do not use quotes or reference external authors.
+Do not introduce insight or conclusions.
+The framing should feel like a quiet container sentence that could be read aloud without pressure.
+End the sentence with terminal punctuation.
+Stop immediately after the sentence.
+If a complete sentence cannot be produced safely, return nothing.
 No extra text.`;
 }
 
-function buildReflectionPrompt(rawNotes) {
+function _buildReflectionPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-Return 0–2 short reflective items, one per line.
-Items are non-actionable and may be open-ended, but must be syntactically complete sentences.
-Do NOT cut off mid-thought.
+Reflection is optional. Return 0–3 reflective sentences, one per line.
+
+Each reflection item must be one complete, self-contained sentence.
+Use reflective phrasing (observational, third-person) rather than diary phrasing (first-person, emotional).
+Example transformation (conceptual): "I feel bad about my work output" → "There is a recurring sense of dissatisfaction with current work output."
+
+Requirements:
+- Each sentence must be complete and self-contained.
+- Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
+- If a complete sentence cannot be produced, omit the item entirely.
+- Preserve uncertainty, doubt, or open-endedness if present in RAW.
+- Ground each reflection strictly in what is explicitly stated in RAW.
+- Each sentence must end with terminal punctuation (. ! ?).
+
+Forbidden:
+- Do NOT add advice, conclusions, or meaning.
+- Do NOT resolve emotions or provide closure.
+- Do NOT use first-person emotional phrasing ("I feel", "I think", "I'm worried").
+- Do NOT use continuation phrases ("it feels like", "I think that", "I haven't").
+- Do NOT add interpretation beyond what RAW explicitly states.
+
+If a complete, reflective sentence cannot be produced safely, return nothing.
 No extra text.`;
 }
 
 // ================== PARSERS ==================
-function parseOrientation(text) {
+function _parseOrientation(text) {
   if (!text || !text.trim()) {
     throw new Error('EMPTY ORIENTATION TEXT — Cannot parse orientation');
   }
@@ -252,7 +328,7 @@ function parseOrientation(text) {
   return lines;
 }
 
-function parseReflection(text) {
+function _parseReflection(text) {
   if (!text || !text.trim()) {
     return [];
   }
@@ -282,7 +358,7 @@ function parseReflection(text) {
   return lines;
 }
 
-function parseStringField(text, fieldName) {
+function _parseStringField(text, fieldName) {
   if (!text || !text.trim()) {
     throw new Error('EMPTY ' + fieldName.toUpperCase() + ' TEXT — Cannot parse ' + fieldName);
   }
@@ -305,8 +381,8 @@ function parseStringField(text, fieldName) {
 
 
 // ================== WRITE OUTPUT ==================
-function writeSurfaceASubstrate(substrate, status) {
-  const sheet = getSheetOrFail(SURFACEA_GEN_TAB_SURFACE_A);
+function _writeSurfaceASubstrate(substrate, status) {
+  const sheet = _getSheetOrFail(SURFACEA_GEN_TAB_SURFACE_A);
   const now = new Date();
 
   const orientationText = substrate.orientation.map(x => '• ' + x).join('\n');
@@ -328,8 +404,8 @@ function writeSurfaceASubstrate(substrate, status) {
 }
 
 // ================== HELPERS ==================
-function getRecentRawNotes(limit) {
-  const sheet = getSheetOrFail(SURFACEA_GEN_TAB_RAW);
+function _getRecentRawNotes(limit) {
+  const sheet = _getSheetOrFail(SURFACEA_GEN_TAB_RAW);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) return [];
@@ -342,19 +418,10 @@ function getRecentRawNotes(limit) {
     .slice(-limit);
 }
 
-function getLastSuccessfulRunAt() {
+function _getLastSuccessfulRunAt() {
   // TODO: Read last_successful_run_at from SURFACE_A substrate
   // Returns null if no previous successful run exists
   return null;
 }
 
-function getSheetOrFail(name) {
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName(name);
-
-  if (!sheet) {
-    throw new Error('Missing required tab: ' + name);
-  }
-
-  return sheet;
-}
+// _getSheetOrFail is defined in personal_os_v2.js

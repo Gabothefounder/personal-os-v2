@@ -53,6 +53,8 @@ function runSurfaceBWeeklyOnce() {
 
   _writeWeeklyView(brief);
 
+  _writeWeeklyBriefToDoc(brief);
+
   Logger.log('--- SURFACE B WEEKLY BRIEF END ---');
 }
 
@@ -273,6 +275,111 @@ function _writeWeeklyView(text) {
   ];
 
   sheet.getRange(1, 1, rows.length, 1).setValues(rows);
+}
+
+// ================== EXPORT TO WEEKLY INTELLIGENCE BRIEF DOC ==================
+function _writeWeeklyBriefToDoc(weeklyText) {
+  if (!weeklyText || !weeklyText.trim()) {
+    Logger.log('No weekly text to write to Weekly Intelligence Brief doc.');
+    return;
+  }
+
+  const props = PropertiesService.getScriptProperties();
+  let docId = props.getProperty('WEEKLY_BRIEF_DOC_ID');
+
+  let doc = null;
+
+  // Try to open by ID if it exists
+  if (docId) {
+    try {
+      doc = DocumentApp.openById(docId);
+      Logger.log('Weekly Intelligence Brief document opened by ID.');
+    } catch (e) {
+      Logger.log('Could not open Weekly Intelligence Brief document by ID: ' + e.message);
+      Logger.log('Attempting to search Drive by name...');
+      docId = null; // Clear invalid ID
+    }
+  }
+
+  // If ID is invalid or missing, search Drive by name
+  if (!doc && !docId) {
+    try {
+      const files = DriveApp.getFilesByName('Weekly Intelligence Brief');
+      if (files.hasNext()) {
+        const file = files.next();
+        docId = file.getId();
+        doc = DocumentApp.openById(docId);
+        // Store the found ID for future use
+        props.setProperty('WEEKLY_BRIEF_DOC_ID', docId);
+        Logger.log('Weekly Intelligence Brief document found by name and opened. ID stored.');
+      } else {
+        Logger.log('Weekly Intelligence Brief document not found in Drive. Document not updated.');
+        return;
+      }
+    } catch (e) {
+      Logger.log('Could not search for Weekly Intelligence Brief document: ' + e.message);
+      return;
+    }
+  }
+
+  if (!doc) {
+    Logger.log('Could not open Weekly Intelligence Brief document. Document not updated.');
+    return;
+  }
+
+  const body = doc.getBody();
+  body.clear();
+
+  // Compute emission date header
+  const now = new Date();
+  const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  const dateString = now.toLocaleDateString('en-US', dateOptions);
+  const dateHeader = 'Generated: ' + dateString;
+
+  // Write date header as first paragraph
+  body.appendParagraph(dateHeader);
+  
+  // Insert exactly one blank line
+  body.appendParagraph('');
+  
+  // Write weeklyText verbatim, preserving line breaks
+  const lines = weeklyText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    body.appendParagraph(line);
+  }
+
+  Logger.log('Weekly Intelligence Brief document updated successfully.');
+}
+
+// ================== TRIGGER SETUP ==================
+// Ensures a weekly Sunday trigger exists for runSurfaceBWeeklyOnce.
+// Idempotent: will not create duplicate triggers.
+function ensureWeeklySundayTrigger() {
+  // Scan existing triggers for runSurfaceBWeeklyOnce
+  const existingTriggers = ScriptApp.getProjectTriggers();
+  let hasWeeklyTrigger = false;
+
+  for (let i = 0; i < existingTriggers.length; i++) {
+    const trigger = existingTriggers[i];
+    const handlerFunction = trigger.getHandlerFunction();
+    
+    if (handlerFunction === 'runSurfaceBWeeklyOnce') {
+      hasWeeklyTrigger = true;
+      Logger.log('Weekly Sunday trigger already exists. No action taken.');
+      break;
+    }
+  }
+
+  // Create trigger if it doesn't exist
+  if (!hasWeeklyTrigger) {
+    ScriptApp.newTrigger('runSurfaceBWeeklyOnce')
+      .timeBased()
+      .onWeekDay(ScriptApp.WeekDay.SUNDAY)
+      .atHour(7) // 7:00 AM local time
+      .create();
+    Logger.log('Weekly Sunday trigger created for runSurfaceBWeeklyOnce (Sundays at 7:00 AM).');
+  }
 }
 
 // ================== HELPERS ==================

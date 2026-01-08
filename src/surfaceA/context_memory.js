@@ -192,6 +192,37 @@ function addPerson(input) {
   return personId;
 }
 
+function createPerson(displayName, privacyLevel, notes) {
+  if (!displayName || typeof displayName !== 'string') {
+    throw new Error('displayName is required');
+  }
+  
+  const trimmedName = displayName.trim();
+  if (trimmedName.length === 0) {
+    throw new Error('displayName cannot be empty');
+  }
+  
+  const personId = Utilities.getUuid();
+  const now = new Date();
+  const privacy = privacyLevel ? String(privacyLevel).trim() : 'private_only';
+  const notesText = notes ? String(notes).trim() : '';
+  
+  const sheet = _getSheetOrFail('PEOPLE');
+  
+  const row = [
+    personId, // person_id
+    trimmedName, // display_name
+    now, // created_at
+    '', // aliases
+    '', // relationship_category
+    privacy, // privacy_level
+    notesText // notes
+  ];
+  
+  sheet.appendRow(row);
+  return personId;
+}
+
 function listPeople() {
   const sheet = _getSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   if (!sheet) {

@@ -115,28 +115,32 @@ function initExecutionSheet() {
 }
 
 // ================== INBOX OPERATIONS ==================
-function createInboxItem(input) {
-  if (!input || (!input.content || !input.content.trim()) && (!input.audio_reference || !input.audio_reference.trim())) {
-    throw new Error('Content or audio_reference is required');
+function createInboxItem(content) {
+  if (!content || typeof content !== 'string' || !content.trim()) {
+    throw new Error('Content is required');
   }
-
-  const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
-  _initInboxSheet();
-
-  const inboxId = _generateInboxId();
+  
+  const ss = SpreadsheetApp.getActive();
+  let sheet = ss.getSheetByName(EXECUTION_TAB_INBOX);
+  
+  if (!sheet) {
+    sheet = ss.insertSheet(EXECUTION_TAB_INBOX);
+  }
+  
+  _initInboxSheet(); // Ensure headers exist
+  
+  const inboxId = Utilities.getUuid();
   const now = new Date();
-  const content = input.content ? String(input.content).trim() : '';
-  const captureMode = input.audio_reference ? 'audio' : 'text';
-
+  
   const row = [
-    inboxId,
-    now,
-    content || input.audio_reference,
-    captureMode,
-    input.source ? String(input.source).trim() : '',
-    input.notes ? String(input.notes).trim() : ''
+    inboxId, // inbox_id (UUID)
+    now, // created_at (current date)
+    content.trim(), // content (verbatim, trimmed only)
+    'text', // capture_mode
+    '', // source
+    '' // notes
   ];
-
+  
   sheet.appendRow(row);
   return inboxId;
 }
@@ -586,4 +590,11 @@ function _getOrCreateSheet(name) {
   }
 
   return sheet;
+}
+
+// ================== UI OPERATIONS ==================
+function openExecutionInboxSidebar() {
+  const html = HtmlService.createHtmlOutputFromFile("execution_inbox_sidebar")
+    .setTitle("Execution Inbox");
+  SpreadsheetApp.getUi().showSidebar(html);
 }

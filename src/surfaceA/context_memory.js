@@ -63,6 +63,15 @@ function _initContextSheets() {
   _initInteractionsSheet();
 }
 
+// ================== UI MENU ==================
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('Personal OS')
+    .addItem('Add Person', 'openPeopleSidebar')
+    .addItem('Add Interaction', 'openInteractionSidebar')
+    .addToUi();
+}
+
 function _initPeopleSheet() {
   const sheet = _getOrCreateSheet(CONTEXT_MEMORY_TAB_PEOPLE);
   const data = sheet.getDataRange().getValues();
@@ -226,6 +235,12 @@ function createPerson(displayName, privacyLevel, notes) {
 function openPeopleSidebar() {
   const html = HtmlService.createHtmlOutputFromFile('people_sidebar')
     .setTitle('Add Person');
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function openInteractionSidebar() {
+  const html = HtmlService.createHtmlOutputFromFile('interaction_sidebar')
+    .setTitle('Add Interaction');
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
@@ -493,6 +508,34 @@ function addInteraction(input) {
       throw new Error('Cannot write v1.1 fields to v1.0 schema. Run migrateInteractionsToV1_1() first.');
     }
   }
+  
+  sheet.appendRow(row);
+  return interactionId;
+}
+
+function createInteraction(personId, notes, followUpHint, followUpNote) {
+  if (!personId || typeof personId !== 'string' || !personId.trim()) {
+    throw new Error('personId is required');
+  }
+  
+  const interactionId = _generateInteractionId();
+  const now = new Date();
+  const notesText = notes !== undefined && notes !== null ? String(notes).trim() : '';
+  const followUpHintBool = followUpHint === true || followUpHint === 'TRUE' || followUpHint === 'true' || followUpHint === 1;
+  const followUpNoteText = followUpNote ? String(followUpNote).trim() : '';
+  
+  const sheet = _getSheetOrFail('INTERACTIONS');
+  
+  const row = [
+    interactionId, // interaction_id
+    String(personId).trim(), // person_id
+    now, // occurred_at
+    '', // topic_tags
+    notesText, // notes
+    '', // notes_audio
+    followUpHintBool, // follow_up_hint (boolean)
+    followUpNoteText // follow_up_note
+  ];
   
   sheet.appendRow(row);
   return interactionId;

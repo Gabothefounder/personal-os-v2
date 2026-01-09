@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+</head>
+<body>
+  <form id="interactionForm">
+    <div id="personSelectDiv" style="margin-bottom: 10px;">
+      <label for="person_id">Person:</label><br>
+      <select id="person_id" name="person_id" required style="width: 100%; padding: 5px;">
+        <option value="">Select person...</option>
+      </select>
+    </div>
+    
+    <div style="margin-bottom: 10px;">
+      <label>
+        <input type="checkbox" id="create_new_person" name="create_new_person">
+        Person not in list (create new)
+      </label>
+    </div>
+    
+    <div id="newPersonFieldsDiv" style="display: none; margin-bottom: 10px;">
+      <div style="margin-bottom: 10px;">
+        <label for="new_person_name">New person name:</label><br>
+        <input type="text" id="new_person_name" name="new_person_name" style="width: 100%; padding: 5px;">
+      </div>
+      
+      <div style="margin-bottom: 10px;">
+        <label for="new_person_privacy_level">Privacy level:</label><br>
+        <select id="new_person_privacy_level" name="new_person_privacy_level" style="width: 100%; padding: 5px;">
+          <option value="private_only">private_only</option>
+          <option value="shared">shared</option>
+        </select>
+      </div>
+      
+      <div style="margin-bottom: 10px;">
+        <label for="new_person_notes">Person notes:</label><br>
+        <textarea id="new_person_notes" name="new_person_notes" rows="2" style="width: 100%; padding: 5px;"></textarea>
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 10px;">
+      <label for="notes">Notes:</label><br>
+      <textarea id="notes" name="notes" rows="4" style="width: 100%; padding: 5px;"></textarea>
+    </div>
+    
+    <div style="margin-bottom: 10px;">
+      <label>
+        <input type="checkbox" id="follow_up_hint" name="follow_up_hint">
+        Follow-up hinted
+      </label>
+    </div>
+    
+    <div style="margin-bottom: 10px;">
+      <label for="follow_up_note">Follow-up Note:</label><br>
+      <textarea id="follow_up_note" name="follow_up_note" rows="2" style="width: 100%; padding: 5px;"></textarea>
+    </div>
+    
+    <button type="submit" style="padding: 8px 16px;">Save</button>
+  </form>
+
+  <script>
+    function populatePeopleDropdown() {
+      google.script.run.withSuccessHandler(function(people) {
+        const select = document.getElementById('person_id');
+        select.innerHTML = '<option value="">Select person...</option>';
+        people.forEach(function(person) {
+          const option = document.createElement('option');
+          option.value = person.id;
+          option.textContent = person.name;
+          select.appendChild(option);
+        });
+      }).listPeople();
+    }
+    
+    function togglePersonFields() {
+      const createNew = document.getElementById('create_new_person').checked;
+      const personSelectDiv = document.getElementById('personSelectDiv');
+      const newPersonFieldsDiv = document.getElementById('newPersonFieldsDiv');
+      const personSelect = document.getElementById('person_id');
+      
+      if (createNew) {
+        personSelectDiv.style.display = 'none';
+        personSelect.removeAttribute('required');
+        newPersonFieldsDiv.style.display = 'block';
+        document.getElementById('new_person_name').setAttribute('required', 'required');
+      } else {
+        personSelectDiv.style.display = 'block';
+        personSelect.setAttribute('required', 'required');
+        newPersonFieldsDiv.style.display = 'none';
+        document.getElementById('new_person_name').removeAttribute('required');
+      }
+    }
+    
+    window.onload = function() {
+      populatePeopleDropdown();
+      document.getElementById('create_new_person').addEventListener('change', togglePersonFields);
+    };
+    
+    document.getElementById('interactionForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const createNew = document.getElementById('create_new_person').checked;
+      const notes = document.getElementById('notes').value;
+      const followUpHint = document.getElementById('follow_up_hint').checked;
+      const followUpNote = document.getElementById('follow_up_note').value;
+      
+      if (createNew) {
+        const newPersonName = document.getElementById('new_person_name').value;
+        if (!newPersonName || !newPersonName.trim()) {
+          return;
+        }
+        const newPersonPrivacyLevel = document.getElementById('new_person_privacy_level').value;
+        const newPersonNotes = document.getElementById('new_person_notes').value;
+        
+        google.script.run.withSuccessHandler(function(personId) {
+          google.script.run.createInteraction(personId, notes, followUpHint, followUpNote);
+        }).createPerson(newPersonName.trim(), newPersonPrivacyLevel, newPersonNotes);
+      } else {
+        const personId = document.getElementById('person_id').value;
+        if (!personId) {
+          return;
+        }
+        google.script.run.createInteraction(personId, notes, followUpHint, followUpNote);
+      }
+      
+      document.getElementById('interactionForm').reset();
+      document.getElementById('create_new_person').checked = false;
+      togglePersonFields();
+      populatePeopleDropdown();
+    });
+  </script>
+</body>
+</html>

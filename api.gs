@@ -105,14 +105,15 @@ function doGet(e) {
           items = raw;
         } else if (raw && Array.isArray(raw.items)) {
           items = raw.items;
-        } else if (raw && Array.isArray(raw.data)) {
-          items = raw.data;
         } else {
           items = [];
         }
         
+        const ss = SpreadsheetApp.getActive();
         let promotedCount = 0;
+        let attempted = 0;
         let skippedMissingId = 0;
+        const errors = [];
         
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
@@ -129,30 +130,37 @@ function doGet(e) {
             continue;
           }
           
+          const trimmedId = String(inboxId).trim();
+          attempted++;
+          
           try {
-            const taskId = promoteInboxToTask(inboxId, {});
+            const taskId = promoteInboxToTask(trimmedId, {});
             if (taskId) {
               promotedCount++;
             }
           } catch (e) {
-            // Continue with next item on error
+            errors.push({
+              inbox_id: trimmedId,
+              error: e.message || String(e),
+              stack: e.stack || ''
+            });
           }
         }
         
-        if (items.length > 0 && promotedCount === 0) {
-          return jsonResponse({
-            ok: false,
-            error: "auto_promote_inbox: items detected but none promoted",
-            debug: {
-              items_len: items.length,
-              first_item_type: items[0] === null ? "null" : Array.isArray(items[0]) ? "array" : typeof items[0],
-              first_item_keys: (items[0] && !Array.isArray(items[0]) && typeof items[0] === "object") ? Object.keys(items[0]) : null,
-              skipped_missing_id: skippedMissingId
-            }
-          });
-        }
-        
-        return jsonResponse({ ok: true, promoted_count: promotedCount, inbox_items_seen: items.length, skipped_missing_id: skippedMissingId });
+        return jsonResponse({
+          ok: errors.length === 0,
+          promoted_count: promotedCount,
+          inbox_items_seen: items.length,
+          attempted: attempted,
+          skipped_missing_id: skippedMissingId,
+          debug: {
+            spreadsheet_id: ss.getId(),
+            first_item_type: items.length ? (Array.isArray(items[0]) ? "array" : typeof items[0]) : "none",
+            first_item_keys: (items.length && items[0] && !Array.isArray(items[0]) && typeof items[0] === "object") ? Object.keys(items[0]) : null,
+            first_item_preview: items.length ? items[0] : null
+          },
+          errors: errors
+        });
 
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + action });

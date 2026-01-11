@@ -43,7 +43,7 @@ function doGet(e) {
     const wantsApi = e?.parameter?.api === "1";
     const action = e?.parameter?.action;
     const payload = e.parameter.payload
-      ? JSON.parse(e.parameter.payload)
+      ? JSON.parse(decodeURIComponent(e.parameter.payload))
       : {};
 
     if (!wantsApi || !action) {

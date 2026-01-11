@@ -138,6 +138,14 @@
       font-size: 1rem !important;
     }
 
+    .section-header {
+      font-size: 1.1rem !important;
+      font-weight: 600;
+      color: #1a1a1a;
+      padding: 20px 16px 12px;
+      margin-top: 8px;
+    }
+
     .toast {
       position: fixed;
       bottom: 32px;
@@ -222,6 +230,7 @@
 
     async function loadTasks() {
       try {
+        await callApi("auto_promote_inbox", {});
         const data = await callApi("list_open_tasks", {});
         const tasks = Array.isArray(data) ? data : [];
         renderTasks(tasks);
@@ -232,11 +241,12 @@
 
     function renderTasks(tasks) {
       if (tasks.length === 0) {
-        taskList.innerHTML = '<div class="empty-state">No open tasks</div>';
+        taskList.innerHTML = '<div class="section-header">COMMITMENTS</div><div class="empty-state" style="padding: 20px;">No commitments</div><div class="section-header">ACTIONS</div><div class="empty-state" style="padding: 20px;">No actions</div>';
         return;
       }
 
-      taskList.innerHTML = tasks.map(task => `
+      const commitmentsHtml = '<div class="section-header">COMMITMENTS</div><div class="empty-state" style="padding: 20px;">No commitments</div>';
+      const actionsHtml = '<div class="section-header">ACTIONS</div>' + tasks.map(task => `
         <div class="task-item" data-task-id="${task.task_id}">
           <div class="task-content">${escapeHtml(task.content || '')}</div>
           <div class="task-actions">
@@ -245,6 +255,8 @@
           </div>
         </div>
       `).join('');
+
+      taskList.innerHTML = commitmentsHtml + actionsHtml;
     }
 
     function escapeHtml(text) {

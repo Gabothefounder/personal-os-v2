@@ -98,6 +98,19 @@ function doGet(e) {
         cancelTask(payload.task_id);
         return jsonResponse({ ok: true });
 
+      case "auto_promote_inbox":
+        const inboxItems = listInboxItems();
+        let promotedCount = 0;
+        for (let i = 0; i < inboxItems.length; i++) {
+          try {
+            promoteInboxToTask(inboxItems[i].inbox_id, {});
+            promotedCount++;
+          } catch (e) {
+            // Continue with next item on error
+          }
+        }
+        return jsonResponse({ ok: true, promoted_count: promotedCount });
+
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + action });
     }

@@ -39,26 +39,73 @@ function doPost(e) {
 }
 
 function doGet(e) {
-  const wantsApi =
-    (e && e.parameter && e.parameter.api === "1") ||
-    (e && e.headers && e.headers.Accept && e.headers.Accept.indexOf("application/json") !== -1);
+  try {
+    const wantsApi = e?.parameter?.api === "1";
+    const action = e?.parameter?.action;
+    const payload = e?.parameter?.payload
+      ? JSON.parse(decodeURIComponent(e.parameter.payload))
+      : {};
 
-  if (wantsApi) {
-    const action = e.parameter.action;
-
-    if (action === "listPeople") {
-      return jsonResponse(listPeople());
+    if (!wantsApi || !action) {
+      return HtmlService.createHtmlOutput("Personal OS");
     }
 
-    return jsonResponse({ ok: false, error: "Unknown GET action" });
-  }
+    let result;
 
-  // Fallback: legacy UI or placeholder
-  return HtmlService.createHtmlOutput("Personal OS API is running");
+    switch (action) {
+      case "createRaw":
+        createRawEntry(payload.content || "");
+        result = { ok: true };
+        break;
+
+      case "createInbox":
+        createInboxItem(payload.content || "");
+        result = { ok: true };
+        break;
+
+      case "createPerson":
+        createPerson(payload.name, payload.privacy, payload.notes || "");
+        result = { ok: true };
+        break;
+
+      case "createInteraction":
+        createInteraction(payload.personId, payload.notes || "", false, "");
+        result = { ok: true };
+        break;
+
+      case "listPeople":
+        result = listPeople();
+        break;
+
+      default:
+        result = { ok: false, error: "Unknown action" };
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader("Access-Control-Allow-Origin", "*");
+  }
 }
 
-function jsonResponse(obj) {
+function jsonResponse(payload, statusCode = 200) {
   return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
+    .createTextOutput(JSON.stringify(payload))
+    .setMimeType(ContentService.MimeType.JSON)
+    .setHeader("Access-Control-Allow-Origin", "*")
+    .setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    .setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function doOptions() {
+  return ContentService.createTextOutput("")
+    .setHeader("Access-Control-Allow-Origin", "*")
+    .setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    .setHeader("Access-Control-Allow-Headers", "Content-Type");
 }

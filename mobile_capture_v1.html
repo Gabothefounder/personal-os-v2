@@ -191,6 +191,15 @@
       background: #4338ca;
     }
 
+    button.execution {
+      background: #4f46e5;
+      color: #ffffff;
+    }
+
+    button.execution:active {
+      background: #4338ca;
+    }
+
     .briefs-bottom {
       position: fixed;
       bottom: 0;
@@ -309,7 +318,7 @@
       <button onclick="saveExecution()">Save to Execution</button>
       <button onclick="showPersonView()">Person</button>
       <button onclick="showInteractionView()">Interaction</button>
-      <button onclick="goToExecution()">Execution</button>
+      <button class="execution" onclick="goToExecution()">Execution</button>
     </div>
   </div>
 
@@ -463,7 +472,7 @@
     }
 
     function goToExecution() {
-      window.location.href = API_URL + "?view=execution";
+      window.location.href = API_URL + "?page=execution";
     }
 
     async function savePerson() {

@@ -42,55 +42,53 @@ function doGet(e) {
   try {
     const wantsApi = e?.parameter?.api === "1";
     const action = e?.parameter?.action;
-    const payload = e?.parameter?.payload
-      ? JSON.parse(decodeURIComponent(e.parameter.payload))
+    const payload = e.parameter.payload
+      ? JSON.parse(e.parameter.payload)
       : {};
 
     if (!wantsApi || !action) {
       return HtmlService.createHtmlOutput("Personal OS");
     }
 
-    let result;
-
     switch (action) {
       case "createRaw":
-        createRawEntry(payload.content || "");
-        result = { ok: true };
-        break;
+        if (!payload.content) throw new Error("Missing content");
+        createRawEntry(payload.content);
+        return jsonResponse({ ok: true });
 
       case "createInbox":
-        createInboxItem(payload.content || "");
-        result = { ok: true };
-        break;
+        if (!payload.content) throw new Error("Missing content");
+        createInboxItem(payload.content);
+        return jsonResponse({ ok: true });
 
       case "createPerson":
-        createPerson(payload.name, payload.privacy, payload.notes || "");
-        result = { ok: true };
-        break;
+        if (!payload.name) throw new Error("Missing name");
+        createPerson(
+          payload.name,
+          payload.privacy || "private_only",
+          payload.notes || ""
+        );
+        return jsonResponse({ ok: true });
 
       case "createInteraction":
-        createInteraction(payload.personId, payload.notes || "", false, "");
-        result = { ok: true };
-        break;
+        if (!payload.personId) throw new Error("Missing personId");
+        createInteraction(
+          payload.personId,
+          payload.notes || "",
+          false,
+          ""
+        );
+        return jsonResponse({ ok: true });
 
       case "listPeople":
-        result = listPeople();
-        break;
+        return jsonResponse(listPeople());
 
       default:
-        result = { ok: false, error: "Unknown action" };
+        return jsonResponse({ ok: false, error: "Unknown action" });
     }
 
-    return ContentService
-      .createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
-
   } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader("Access-Control-Allow-Origin", "*");
+    return jsonResponse({ ok: false, error: err.message });
   }
 }
 

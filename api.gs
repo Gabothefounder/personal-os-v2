@@ -39,57 +39,82 @@ function doPost(e) {
 }
 
 function doGet(e) {
-  try {
-    const wantsApi = e?.parameter?.api === "1";
-    const action = e?.parameter?.action;
-    const payload = e.parameter.payload
-      ? JSON.parse(decodeURIComponent(e.parameter.payload))
-      : {};
+  const wantsApi = e && e.parameter && e.parameter.api === "1";
 
-    if (!wantsApi || !action) {
-      return HtmlService.createHtmlOutput("Personal OS");
+  if (wantsApi) {
+    const action = e.parameter.action;
+    if (!action) {
+      return jsonResponse({ ok: false, error: "Missing action parameter" });
     }
+
+    const payload = JSON.parse(e.parameter.payload || "{}");
 
     switch (action) {
       case "createRaw":
-        if (!payload.content) throw new Error("Missing content");
+        if (!payload.content) {
+          return jsonResponse({ ok: false, error: "Missing content" });
+        }
         createRawEntry(payload.content);
         return jsonResponse({ ok: true });
 
       case "createInbox":
-        if (!payload.content) throw new Error("Missing content");
+        if (!payload.content) {
+          return jsonResponse({ ok: false, error: "Missing content" });
+        }
         createInboxItem(payload.content);
         return jsonResponse({ ok: true });
 
       case "createPerson":
-        if (!payload.name) throw new Error("Missing name");
-        createPerson(
-          payload.name,
-          payload.privacy || "private_only",
-          payload.notes || ""
-        );
+        if (!payload.name) {
+          return jsonResponse({ ok: false, error: "Missing name" });
+        }
+        createPerson(payload.name, payload.privacy, payload.notes || "");
         return jsonResponse({ ok: true });
 
       case "createInteraction":
-        if (!payload.personId) throw new Error("Missing personId");
-        createInteraction(
-          payload.personId,
-          payload.notes || "",
-          false,
-          ""
-        );
+        if (!payload.personId) {
+          return jsonResponse({ ok: false, error: "Missing personId" });
+        }
+        createInteraction(payload.personId, payload.notes || "", false, "");
         return jsonResponse({ ok: true });
 
       case "listPeople":
         return jsonResponse(listPeople());
 
-      default:
-        return jsonResponse({ ok: false, error: "Unknown action" });
-    }
+      case "list_open_tasks":
+        return jsonResponse(listOpenTasks());
 
-  } catch (err) {
-    return jsonResponse({ ok: false, error: err.message });
+      case "complete_task":
+        if (!payload.task_id) {
+          return jsonResponse({ ok: false, error: "Missing task_id" });
+        }
+        completeTask(payload.task_id, payload.completion_note || "");
+        return jsonResponse({ ok: true });
+
+      case "cancel_task":
+        if (!payload.task_id) {
+          return jsonResponse({ ok: false, error: "Missing task_id" });
+        }
+        cancelTask(payload.task_id);
+        return jsonResponse({ ok: true });
+
+      default:
+        return jsonResponse({ ok: false, error: "Unknown action: " + action });
+    }
   }
+
+  const view = e && e.parameter && e.parameter.view;
+  if (view === "execution") {
+    return HtmlService
+      .createHtmlOutputFromFile("mobile_execution_v1")
+      .setTitle("Personal OS - Execution")
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
+  return HtmlService
+    .createHtmlOutputFromFile("mobile_capture_v1")
+    .setTitle("Personal OS")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function jsonResponse(obj) {

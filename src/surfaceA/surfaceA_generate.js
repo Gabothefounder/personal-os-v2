@@ -16,6 +16,8 @@ const SURFACEA_GEN_TAB_RAW = 'RAW';
 const SURFACEA_GEN_TAB_SURFACE_A = 'SURFACE_A';
 
 // ================== ENTRY POINT ==================
+// NOTE: For scheduled automation, triggers should call runDailyIntelligenceCycle() instead of runDailySynthesis()
+// to ensure DERIVED runs automatically after successful Surface A synthesis.
 function runDailySynthesis() {
   Logger.log('--- DAILY SYNTHESIS START ---');
 
@@ -605,6 +607,57 @@ function _getLastSuccessfulRunAt() {
   // TODO: Read last_successful_run_at from SURFACE_A substrate
   // Returns null if no previous successful run exists
   return null;
+}
+
+// ================== DAILY INTELLIGENCE ORCHESTRATION ==================
+function runDailyIntelligenceCycle() {
+  Logger.log('--- DAILY INTELLIGENCE CYCLE START ---');
+  
+  runDailySynthesis();
+  
+  // Check if Surface A succeeded by reading SURFACE_A sheet status
+  const sheet = _getSheet(SURFACEA_GEN_TAB_SURFACE_A);
+  if (!sheet) {
+    Logger.log('DERIVED skipped: SURFACE_A sheet not found');
+    Logger.log('--- DAILY INTELLIGENCE CYCLE END ---');
+    return;
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length === 0) {
+    Logger.log('DERIVED skipped: SURFACE_A sheet is empty');
+    Logger.log('--- DAILY INTELLIGENCE CYCLE END ---');
+    return;
+  }
+  
+  // Build key/value map to check last_run_status
+  const keyValueMap = {};
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (row.length >= 2) {
+      const key = String(row[0] || '').trim();
+      const value = row[1];
+      if (key) {
+        keyValueMap[key] = value;
+      }
+    }
+  }
+  
+  const status = keyValueMap['last_run_status'];
+  if (status !== 'SUCCESS') {
+    Logger.log('DERIVED skipped: Surface A did not complete successfully');
+    Logger.log('--- DAILY INTELLIGENCE CYCLE END ---');
+    return;
+  }
+  
+  // Surface A succeeded, run DERIVED
+  try {
+    _runDerivedOnce();
+  } catch (e) {
+    Logger.log('DERIVED computation failed: ' + e.message);
+  }
+  
+  Logger.log('--- DAILY INTELLIGENCE CYCLE END ---');
 }
 
 // _getSheetOrFail is defined in personal_os_v2.js

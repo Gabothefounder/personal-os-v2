@@ -111,8 +111,10 @@ function _readConfirmedSpeakable() {
 // Routes by e.parameter.action for GET requests
 // Routes by JSON body.action for POST requests
 
-function doGet(e) {
-  return handleRequest(e, 'GET');
+// 🚫 Legacy doGet disabled.
+// API entrypoint is handled exclusively in api.gs
+function doGet_DISABLED_DO_NOT_USE(e) {
+  return HtmlService.createHtmlOutput("Disabled legacy doGet");
 }
 
 function doPost(e) {

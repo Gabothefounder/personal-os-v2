@@ -118,7 +118,7 @@
 
     .confirmation.show {
       display: block;
-      animation: fadeInOut 1s;
+      animation: fadeInOut 1.2s;
     }
 
     @keyframes fadeInOut {
@@ -273,7 +273,7 @@
     </div>
     <div class="actions">
       <button onclick="handleRaw()">RAW</button>
-      <button onclick="handleInbox()">INBOX</button>
+      <button onclick="handleExecution()">EXECUTION</button>
       <button class="secondary" onclick="openPersonModal()">PERSON</button>
       <button class="secondary" onclick="openInteractionModal()">INTERACT</button>
     </div>
@@ -328,7 +328,7 @@
   </div>
 
   <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbzSZJAPp13Pm6X3L1tA90M8jPaO0pD2Uk7-tgHJHNQugAQbDViHFzOdUQnhJWrPX84g/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbz6taG9punuGILOOPiEi8a2VglPCVX1K_WMeuaO6CSwOkF7zr6dRT78UIpKGoU8LwUX/exec";
     const input = document.getElementById('input');
     const count = document.getElementById('count');
     const confirmation = document.getElementById('confirmation');
@@ -374,7 +374,7 @@
       }
     }
 
-    async function handleInbox() {
+    async function handleExecution() {
       const content = input.value.trim();
       if (!content) return;
 
@@ -382,7 +382,7 @@
         await callApi("createInbox", { content });
         input.value = "";
         updateCounter();
-        showConfirmation("Added to Inbox");
+        showConfirmation("Saved to Execution");
       } catch (error) {
         showConfirmation('Error: ' + error.message);
       }
@@ -445,7 +445,7 @@
         closePersonModal();
         input.value = "";
         updateCounter();
-        showConfirmation("Person created");
+        showConfirmation("Person saved");
       } catch (error) {
         showConfirmation('Error: ' + error.message);
       }
@@ -552,7 +552,7 @@
       confirmation.classList.add('show');
       setTimeout(() => {
         confirmation.classList.remove('show');
-      }, 1000);
+      }, 1200);
     }
   </script>
 </body>

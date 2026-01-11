@@ -146,14 +146,12 @@ function createInboxItem(content) {
 }
 
 function promoteInboxToTask(inbox_id, options) {
-  Logger.log('promoteInboxToTask entry: inbox_id=' + inbox_id);
   options = options || {};
   
   const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) {
-    Logger.log('Promotion aborted because: No inbox items found');
     throw new Error('No inbox items found');
   }
 
@@ -163,7 +161,6 @@ function promoteInboxToTask(inbox_id, options) {
   const captureModeIdx = headerRow.indexOf('capture_mode');
 
   if (idIdx === -1 || contentIdx === -1) {
-    Logger.log('Promotion aborted because: Invalid EXECUTION_INBOX sheet structure (missing required headers)');
     throw new Error('Invalid EXECUTION_INBOX sheet structure');
   }
 
@@ -176,13 +173,11 @@ function promoteInboxToTask(inbox_id, options) {
         content: data[i][contentIdx],
         capture_mode: captureModeIdx >= 0 ? String(data[i][captureModeIdx] || '').trim() : 'text'
       };
-      Logger.log('Loaded inbox row: ' + JSON.stringify(inboxItem));
       break;
     }
   }
 
   if (!inboxItem) {
-    Logger.log('Promotion aborted because: Inbox item not found: ' + inbox_id);
     throw new Error('Inbox item not found: ' + inbox_id);
   }
 
@@ -197,7 +192,6 @@ function promoteInboxToTask(inbox_id, options) {
   };
 
   const taskId = createTask(taskInput);
-  Logger.log('Task created with task_id: ' + taskId);
 
   // Mark inbox item as processed (delete it)
   _deleteInboxItem(inbox_id);
@@ -240,29 +234,14 @@ function _deleteInboxItem(inbox_id) {
 }
 
 function listInboxItems() {
-  const ss = SpreadsheetApp.getActive();
   const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
-  
-  Logger.log('EXECUTION_INBOX sheet found: ' + (sheet !== null));
-  Logger.log('Spreadsheet ID: ' + ss.getId());
-  Logger.log('Sheet name: ' + EXECUTION_TAB_INBOX);
-  
   const data = sheet.getDataRange().getValues();
-  
-  Logger.log('Total rows (including header): ' + data.length);
 
   if (data.length <= 1) {
-    Logger.log('Total rows (excluding header): 0');
-    Logger.log('Rows after filtering: 0');
     return [];
   }
 
   const headerRow = data[0];
-  Logger.log('Headers: ' + JSON.stringify(headerRow));
-  
-  const totalDataRows = data.length - 1;
-  Logger.log('Total rows (excluding header): ' + totalDataRows);
-  
   const idIdx = headerRow.indexOf('inbox_id');
   const createdAtIdx = headerRow.indexOf('created_at');
   const contentIdx = headerRow.indexOf('content');
@@ -271,7 +250,6 @@ function listInboxItems() {
   const notesIdx = headerRow.indexOf('notes');
 
   if (idIdx === -1 || contentIdx === -1) {
-    Logger.log('Rows after filtering: 0 (missing required headers)');
     return [];
   }
 
@@ -289,7 +267,6 @@ function listInboxItems() {
     });
   }
 
-  Logger.log('Rows after filtering: ' + items.length);
   return items;
 }
 

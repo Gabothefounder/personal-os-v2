@@ -109,11 +109,7 @@ function doGet(e) {
           items = [];
         }
         
-        const ss = SpreadsheetApp.getActive();
         let promotedCount = 0;
-        let attempted = 0;
-        let skippedMissingId = 0;
-        const errors = [];
         
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
@@ -126,41 +122,17 @@ function doGet(e) {
           }
           
           if (!inboxId) {
-            skippedMissingId++;
             continue;
           }
           
           const trimmedId = String(inboxId).trim();
-          attempted++;
-          
-          try {
-            const taskId = promoteInboxToTask(trimmedId, {});
-            if (taskId) {
-              promotedCount++;
-            }
-          } catch (e) {
-            errors.push({
-              inbox_id: trimmedId,
-              error: e.message || String(e),
-              stack: e.stack || ''
-            });
+          const taskId = promoteInboxToTask(trimmedId, {});
+          if (taskId) {
+            promotedCount++;
           }
         }
         
-        return jsonResponse({
-          ok: errors.length === 0,
-          promoted_count: promotedCount,
-          inbox_items_seen: items.length,
-          attempted: attempted,
-          skipped_missing_id: skippedMissingId,
-          debug: {
-            spreadsheet_id: ss.getId(),
-            first_item_type: items.length ? (Array.isArray(items[0]) ? "array" : typeof items[0]) : "none",
-            first_item_keys: (items.length && items[0] && !Array.isArray(items[0]) && typeof items[0] === "object") ? Object.keys(items[0]) : null,
-            first_item_preview: items.length ? items[0] : null
-          },
-          errors: errors
-        });
+        return jsonResponse({ ok: true, promoted_count: promotedCount });
 
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + action });

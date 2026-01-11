@@ -103,7 +103,8 @@ function doGet(e) {
         let promotedCount = 0;
         for (let i = 0; i < inboxItems.length; i++) {
           try {
-            promoteInboxToTask(inboxItems[i].inbox_id, {});
+            const item = inboxItems[i];
+            promoteInboxToTask(item.inbox_id, {});
             promotedCount++;
           } catch (e) {
             // Continue with next item on error

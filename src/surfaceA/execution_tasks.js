@@ -234,14 +234,29 @@ function _deleteInboxItem(inbox_id) {
 }
 
 function listInboxItems() {
+  const ss = SpreadsheetApp.getActive();
   const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
+  
+  Logger.log('EXECUTION_INBOX sheet found: ' + (sheet !== null));
+  Logger.log('Spreadsheet ID: ' + ss.getId());
+  Logger.log('Sheet name: ' + EXECUTION_TAB_INBOX);
+  
   const data = sheet.getDataRange().getValues();
+  
+  Logger.log('Total rows (including header): ' + data.length);
 
   if (data.length <= 1) {
+    Logger.log('Total rows (excluding header): 0');
+    Logger.log('Rows after filtering: 0');
     return [];
   }
 
   const headerRow = data[0];
+  Logger.log('Headers: ' + JSON.stringify(headerRow));
+  
+  const totalDataRows = data.length - 1;
+  Logger.log('Total rows (excluding header): ' + totalDataRows);
+  
   const idIdx = headerRow.indexOf('inbox_id');
   const createdAtIdx = headerRow.indexOf('created_at');
   const contentIdx = headerRow.indexOf('content');
@@ -250,6 +265,7 @@ function listInboxItems() {
   const notesIdx = headerRow.indexOf('notes');
 
   if (idIdx === -1 || contentIdx === -1) {
+    Logger.log('Rows after filtering: 0 (missing required headers)');
     return [];
   }
 
@@ -267,6 +283,7 @@ function listInboxItems() {
     });
   }
 
+  Logger.log('Rows after filtering: ' + items.length);
   return items;
 }
 
@@ -566,6 +583,81 @@ function runExecutionSelfTest() {
   Logger.log('Inbox items: ' + inboxCount);
 
   Logger.log('--- EXECUTION SELF TEST END ---');
+}
+
+// ================== SCHEMA NORMALIZATION ==================
+function normalizeExecutionInboxSchema() {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length === 0) {
+    _initInboxSheet();
+    return;
+  }
+  
+  const headerRow = data[0];
+  const canonicalHeaders = ['inbox_id', 'created_at', 'content', 'capture_mode', 'source', 'notes'];
+  
+  // Map legacy headers to canonical names
+  const headerMap = {};
+  for (let i = 0; i < headerRow.length; i++) {
+    const header = String(headerRow[i] || '').trim().toLowerCase();
+    if (header === 'id') {
+      headerMap['inbox_id'] = i;
+    } else if (header === 'timestamp') {
+      headerMap['created_at'] = i;
+    } else if (header === 'text' || header === 'note') {
+      headerMap['content'] = i;
+    } else if (canonicalHeaders.indexOf(headerRow[i]) !== -1) {
+      headerMap[headerRow[i]] = i;
+    }
+  }
+  
+  // Check which canonical headers are missing
+  const missingHeaders = [];
+  const newHeaderRow = [];
+  const columnMapping = [];
+  
+  for (let i = 0; i < canonicalHeaders.length; i++) {
+    const canonicalHeader = canonicalHeaders[i];
+    if (headerMap.hasOwnProperty(canonicalHeader)) {
+      newHeaderRow.push(canonicalHeader);
+      columnMapping.push(headerMap[canonicalHeader]);
+    } else {
+      newHeaderRow.push(canonicalHeader);
+      columnMapping.push(-1);
+      missingHeaders.push(canonicalHeader);
+    }
+  }
+  
+  // If headers need normalization, rebuild the sheet
+  if (missingHeaders.length > 0 || headerRow.length !== canonicalHeaders.length) {
+    const numRows = data.length;
+    const numCols = canonicalHeaders.length;
+    
+    // Build new data array
+    const newData = [newHeaderRow];
+    
+    for (let rowIdx = 1; rowIdx < numRows; rowIdx++) {
+      const oldRow = data[rowIdx];
+      const newRow = [];
+      for (let colIdx = 0; colIdx < numCols; colIdx++) {
+        const sourceColIdx = columnMapping[colIdx];
+        if (sourceColIdx >= 0 && sourceColIdx < oldRow.length) {
+          newRow.push(oldRow[sourceColIdx]);
+        } else {
+          newRow.push('');
+        }
+      }
+      newData.push(newRow);
+    }
+    
+    // Clear and rewrite
+    sheet.clear();
+    if (newData.length > 0) {
+      sheet.getRange(1, 1, newData.length, newData[0].length).setValues(newData);
+    }
+  }
 }
 
 // ================== HELPERS ==================

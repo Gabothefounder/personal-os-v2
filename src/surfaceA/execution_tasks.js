@@ -127,18 +127,18 @@ function createInboxItem(content) {
     sheet = ss.insertSheet(EXECUTION_TAB_INBOX);
   }
   
-  _initInboxSheet(); // Ensure headers exist
+  _initInboxSheet();
   
   const inboxId = Utilities.getUuid();
   const now = new Date();
   
   const row = [
-    inboxId, // inbox_id (UUID)
-    now, // created_at (current date)
-    content.trim(), // content (verbatim, trimmed only)
-    'text', // capture_mode
-    '', // source
-    '' // notes
+    inboxId,
+    now,
+    content.trim(),
+    'text',
+    'mobile_capture',
+    ''
   ];
   
   sheet.appendRow(row);
@@ -146,12 +146,14 @@ function createInboxItem(content) {
 }
 
 function promoteInboxToTask(inbox_id, options) {
+  Logger.log('promoteInboxToTask entry: inbox_id=' + inbox_id);
   options = options || {};
   
   const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
   const data = sheet.getDataRange().getValues();
 
   if (data.length <= 1) {
+    Logger.log('Promotion aborted because: No inbox items found');
     throw new Error('No inbox items found');
   }
 
@@ -161,6 +163,7 @@ function promoteInboxToTask(inbox_id, options) {
   const captureModeIdx = headerRow.indexOf('capture_mode');
 
   if (idIdx === -1 || contentIdx === -1) {
+    Logger.log('Promotion aborted because: Invalid EXECUTION_INBOX sheet structure (missing required headers)');
     throw new Error('Invalid EXECUTION_INBOX sheet structure');
   }
 
@@ -173,11 +176,13 @@ function promoteInboxToTask(inbox_id, options) {
         content: data[i][contentIdx],
         capture_mode: captureModeIdx >= 0 ? String(data[i][captureModeIdx] || '').trim() : 'text'
       };
+      Logger.log('Loaded inbox row: ' + JSON.stringify(inboxItem));
       break;
     }
   }
 
   if (!inboxItem) {
+    Logger.log('Promotion aborted because: Inbox item not found: ' + inbox_id);
     throw new Error('Inbox item not found: ' + inbox_id);
   }
 
@@ -192,6 +197,7 @@ function promoteInboxToTask(inbox_id, options) {
   };
 
   const taskId = createTask(taskInput);
+  Logger.log('Task created with task_id: ' + taskId);
 
   // Mark inbox item as processed (delete it)
   _deleteInboxItem(inbox_id);
@@ -586,6 +592,81 @@ function runExecutionSelfTest() {
 }
 
 // ================== SCHEMA NORMALIZATION ==================
+function normalizeExecutionTasksSchema() {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length === 0) {
+    _initExecutionSheet();
+    return;
+  }
+  
+  const headerRow = data[0];
+  const canonicalHeaders = [
+    'task_id',
+    'created_at',
+    'content',
+    'state',
+    'project_id',
+    'origin',
+    'inbox_id',
+    'capture_mode',
+    'completed_at',
+    'completion_note',
+    'write_to_raw',
+    'title',
+    'notes',
+    'status',
+    'due_date',
+    'decided_id'
+  ];
+  
+  const headerMap = {};
+  for (let i = 0; i < headerRow.length; i++) {
+    const header = String(headerRow[i] || '').trim();
+    if (canonicalHeaders.indexOf(header) !== -1) {
+      headerMap[header] = i;
+    }
+  }
+  
+  const newHeaderRow = [];
+  const columnMapping = [];
+  
+  for (let i = 0; i < canonicalHeaders.length; i++) {
+    const canonicalHeader = canonicalHeaders[i];
+    newHeaderRow.push(canonicalHeader);
+    if (headerMap.hasOwnProperty(canonicalHeader)) {
+      columnMapping.push(headerMap[canonicalHeader]);
+    } else {
+      columnMapping.push(-1);
+    }
+  }
+  
+  const numRows = data.length;
+  const numCols = canonicalHeaders.length;
+  
+  const newData = [newHeaderRow];
+  
+  for (let rowIdx = 1; rowIdx < numRows; rowIdx++) {
+    const oldRow = data[rowIdx];
+    const newRow = [];
+    for (let colIdx = 0; colIdx < numCols; colIdx++) {
+      const sourceColIdx = columnMapping[colIdx];
+      if (sourceColIdx >= 0 && sourceColIdx < oldRow.length) {
+        newRow.push(oldRow[sourceColIdx]);
+      } else {
+        newRow.push('');
+      }
+    }
+    newData.push(newRow);
+  }
+  
+  sheet.clear();
+  if (newData.length > 0) {
+    sheet.getRange(1, 1, newData.length, newData[0].length).setValues(newData);
+  }
+}
+
 function normalizeExecutionInboxSchema() {
   const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
   const data = sheet.getDataRange().getValues();

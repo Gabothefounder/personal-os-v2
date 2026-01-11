@@ -103,11 +103,19 @@ function doGet(e) {
     }
   }
 
-  const view = e && e.parameter && e.parameter.view;
-  if (view === "execution") {
+  const page = e && e.parameter && e.parameter.page;
+  
+  if (page === "execution") {
     return HtmlService
       .createHtmlOutputFromFile("mobile_execution_v1")
       .setTitle("Personal OS - Execution")
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+  
+  if (page === "briefs") {
+    return HtmlService
+      .createHtmlOutputFromFile("mobile_capture_v1")
+      .setTitle("Personal OS - Briefs")
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 

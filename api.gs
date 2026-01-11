@@ -99,18 +99,60 @@ function doGet(e) {
         return jsonResponse({ ok: true });
 
       case "auto_promote_inbox":
-        const inboxItems = listInboxItems();
+        const raw = listInboxItems();
+        let items = [];
+        if (Array.isArray(raw)) {
+          items = raw;
+        } else if (raw && Array.isArray(raw.items)) {
+          items = raw.items;
+        } else if (raw && Array.isArray(raw.data)) {
+          items = raw.data;
+        } else {
+          items = [];
+        }
+        
         let promotedCount = 0;
-        for (let i = 0; i < inboxItems.length; i++) {
+        let skippedMissingId = 0;
+        
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          let inboxId = null;
+          
+          if (Array.isArray(item)) {
+            inboxId = item[0];
+          } else if (item && typeof item === 'object') {
+            inboxId = item.inbox_id || item.inboxId || item.id;
+          }
+          
+          if (!inboxId) {
+            skippedMissingId++;
+            continue;
+          }
+          
           try {
-            const item = inboxItems[i];
-            promoteInboxToTask(item.inbox_id, {});
-            promotedCount++;
+            const taskId = promoteInboxToTask(inboxId, {});
+            if (taskId) {
+              promotedCount++;
+            }
           } catch (e) {
             // Continue with next item on error
           }
         }
-        return jsonResponse({ ok: true, promoted_count: promotedCount });
+        
+        if (items.length > 0 && promotedCount === 0) {
+          return jsonResponse({
+            ok: false,
+            error: "auto_promote_inbox: items detected but none promoted",
+            debug: {
+              items_len: items.length,
+              first_item_type: items[0] === null ? "null" : Array.isArray(items[0]) ? "array" : typeof items[0],
+              first_item_keys: (items[0] && !Array.isArray(items[0]) && typeof items[0] === "object") ? Object.keys(items[0]) : null,
+              skipped_missing_id: skippedMissingId
+            }
+          });
+        }
+        
+        return jsonResponse({ ok: true, promoted_count: promotedCount, inbox_items_seen: items.length, skipped_missing_id: skippedMissingId });
 
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + action });

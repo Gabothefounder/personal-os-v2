@@ -48,24 +48,28 @@
       height: 56px;
       display: flex;
       align-items: center;
-      justify-content: center;
+      padding: 0 16px;
       font-weight: 500;
       color: #666;
-      position: relative;
       flex-shrink: 0;
     }
 
+    .header-title {
+      flex: 1;
+      text-align: center;
+      font-size: 1.1rem !important;
+    }
+
     .back-button {
-      position: absolute;
-      left: 0;
       background: none;
       border: none;
-      font-size: 24px;
+      font-size: 1.1rem !important;
       color: #1a1a1a;
       cursor: pointer;
       padding: 8px;
       display: flex;
       align-items: center;
+      min-width: 80px;
       -webkit-text-size-adjust: 100%;
       text-size-adjust: 100%;
     }
@@ -178,7 +182,8 @@
 <body>
   <div class="header">
     <button class="back-button" onclick="goToCapture()">← Back</button>
-    <div>Execution</div>
+    <div class="header-title">Execution</div>
+    <div style="min-width: 80px;"></div>
   </div>
   <div class="task-list" id="task-list">
     <div class="empty-state">Loading...</div>
@@ -192,7 +197,7 @@
     const toast = document.getElementById('toast');
 
     function goToCapture() {
-      window.location.href = API_URL;
+      window.location.href = API_URL.split('?')[0];
     }
 
     function showToast(message) {

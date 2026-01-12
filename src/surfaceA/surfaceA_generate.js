@@ -254,45 +254,23 @@ function _buildOrientationPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-GLOBAL RULES:
-- Never give advice.
-- Never assign meaning or lessons.
-- Never motivate or reassure.
-- Never predict outcomes.
-- Never imply obligation.
-- Avoid abstract filler.
-- All sentences must end with terminal punctuation.
-- All sentences must be complete. No ellipses. No unfinished phrases.
-- Output must be entirely in a single language. Do not mix languages.
-- Use ONE language only. Do not mix languages.
+GLOBAL OUTPUT RULES (CRITICAL):
+- Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
-- Do not use bullet points, lists, or leading symbols.
-- Do not truncate sentences.
+- Do NOT use bullet points, lists, dashes, or leading symbols.
+- Do NOT truncate sentences.
 - Prefer fewer complete sentences over many partial ones.
-- If content is unclear, output less text, not unfinished text.
-- Each field may contain multiple sentences, but every sentence must be complete.
-- It is acceptable to return an empty string if no actions exist.
+- If information is insufficient, output an empty string for that field.
+- Never output placeholders, ellipses, or unfinished thoughts.
+- Surface A is descriptive only. No advice, no judgment, no interpretation.
 
-ORIENTATION PURPOSE:
-Write 1–3 complete sentences describing finite, concrete, near-term actions.
+ORIENTATION:
+Write 0 to 3 complete sentences.
+Each sentence must be fully formed.
+If the RAW entries do not clearly support this field, return an empty string.
+Do not summarize across days. Use only the provided RAW window.
 
-RULES:
-- Maximum 3 complete sentences.
-- Each sentence must be complete and specific.
-- Each sentence must include a clear verb and object.
-- Avoid duplication.
-- Do not use bullets, lists, or leading symbols.
-
-DEDUPLICATION RULE:
-If two sentences share the same verb and object, keep ONLY the more specific one.
-
-EXAMPLES:
-Bad:
-Send a report.
-Send a report to Kristen.
-
-Good:
-Send a report from Lucid to Kristen within two weeks.
+Field intent: What the day was broadly oriented around, if observable.
 
 Each sentence must be concrete, action-oriented, and complete.
 Sentences must NOT end with conjunctions (and, or), prepositions (to, for, with), or auxiliary verbs.
@@ -310,49 +288,33 @@ function _buildAttentionPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-GLOBAL RULES:
-- Never give advice.
-- Never assign meaning or lessons.
-- Never motivate or reassure.
-- Never predict outcomes.
-- Never imply obligation.
-- Avoid abstract filler.
-- All sentences must end with terminal punctuation.
-- All sentences must be complete. No ellipses. No unfinished phrases.
-- Output must be entirely in a single language. Do not mix languages.
-- Use ONE language only. Do not mix languages.
+GLOBAL OUTPUT RULES (CRITICAL):
+- Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
-- Do not use bullet points, lists, or leading symbols.
-- Do not truncate sentences.
+- Do NOT use bullet points, lists, dashes, or leading symbols.
+- Do NOT truncate sentences.
 - Prefer fewer complete sentences over many partial ones.
-- If content is unclear, output less text, not unfinished text.
-- Each field may contain multiple sentences, but every sentence must be complete.
-- It is acceptable to return an empty string if no attention framing exists.
+- If information is insufficient, output an empty string for that field.
+- Never output placeholders, ellipses, or unfinished thoughts.
+- Surface A is descriptive only. No advice, no judgment, no interpretation.
 
-ATTENTION PURPOSE:
-Write 1–3 complete sentences describing how attention is being allocated or framed internally.
-This may include social or relational framing if explicitly present in RAW.
+ATTENTION:
+Write 0 to 3 complete sentences.
+Each sentence must be fully formed.
+If the RAW entries do not clearly support this field, return an empty string.
+Do not summarize across days. Use only the provided RAW window.
 
-RULES:
-- Must be descriptive, not prescriptive.
-- May reference people if they appear in RAW.
-- May include light evaluative framing (e.g., entertainment vs serious),
+Field intent: Where cognitive or emotional attention was primarily directed.
+
+Must be descriptive, not prescriptive.
+May reference people if they appear in RAW.
+May include light evaluative framing (e.g., entertainment vs serious),
   but must avoid:
   - advice
   - expectation-setting
   - psychological diagnosis
   - moral judgment
-- Do not use bullets, lists, or leading symbols.
 
-EXAMPLES:
-Allowed:
-"Interaction with Geneviève is noted as entertainment rather than a serious pursuit."
-
-Forbidden:
-"This relationship should not be pursued."
-"This indicates avoidance."
-
-Return 1–3 complete sentences, or return an empty string if no attention framing exists.
 Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
 If a complete sentence cannot be produced, return an empty string.
 End each sentence with a period if returning text.
@@ -364,41 +326,27 @@ function _buildContextPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-GLOBAL RULES:
-- Never give advice.
-- Never assign meaning or lessons.
-- Never motivate or reassure.
-- Never predict outcomes.
-- Never imply obligation.
-- Avoid abstract filler.
-- All sentences must end with terminal punctuation.
-- All sentences must be complete. No ellipses. No unfinished phrases.
-- Output must be entirely in a single language. Do not mix languages.
-- Use ONE language only. Do not mix languages.
+GLOBAL OUTPUT RULES (CRITICAL):
+- Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
-- Do not use bullet points, lists, or leading symbols.
-- Do not truncate sentences.
+- Do NOT use bullet points, lists, dashes, or leading symbols.
+- Do NOT truncate sentences.
 - Prefer fewer complete sentences over many partial ones.
-- If content is unclear, output less text, not unfinished text.
-- Each field may contain multiple sentences, but every sentence must be complete.
-- It is acceptable to return an empty string if no concrete facts exist.
+- If information is insufficient, output an empty string for that field.
+- Never output placeholders, ellipses, or unfinished thoughts.
+- Surface A is descriptive only. No advice, no judgment, no interpretation.
 
-CONTEXT PURPOSE:
-Write 1–3 complete sentences recording concrete, external facts and logistics only.
+CONTEXT:
+Write 0 to 3 complete sentences.
+Each sentence must be fully formed.
+If the RAW entries do not clearly support this field, return an empty string.
+Do not summarize across days. Use only the provided RAW window.
 
-RULES:
-- Only include observable events, actions, or references.
-- No internal states, intentions, or abstractions.
-- No relationship evaluation.
-- If no concrete facts exist, return an empty string.
-- Do not use bullets, lists, or leading symbols.
+Field intent: Factual situational backdrop (events, people, circumstances).
 
-EXAMPLES:
-Good:
-"Notes reference sending a Lucid report and messaging Jose."
-
-Bad:
-"The day involved professional and social considerations."
+Only include observable events, actions, or references.
+No internal states, intentions, or abstractions.
+No relationship evaluation.
 
 Each sentence must report concrete situational facts only: people, communications, obligations, events.
 Each sentence MUST reference at least one concrete noun (person, message, document, payment, event).
@@ -426,45 +374,29 @@ function _buildFramingPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-GLOBAL RULES:
-- Never give advice.
-- Never assign meaning or lessons.
-- Never motivate or reassure.
-- Never predict outcomes.
-- Never imply obligation.
-- Avoid abstract filler.
-- All sentences must end with terminal punctuation.
-- All sentences must be complete. No ellipses. No unfinished phrases.
-- Output must be entirely in a single language. Do not mix languages.
-- Use ONE language only. Do not mix languages.
+GLOBAL OUTPUT RULES (CRITICAL):
+- Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
-- Do not use bullet points, lists, or leading symbols.
-- Do not truncate sentences.
+- Do NOT use bullet points, lists, dashes, or leading symbols.
+- Do NOT truncate sentences.
 - Prefer fewer complete sentences over many partial ones.
-- If content is unclear, output less text, not unfinished text.
-- Each field may contain multiple sentences, but every sentence must be complete.
-- It is acceptable to return an empty string if insufficient grounding exists.
+- If information is insufficient, output an empty string for that field.
+- Never output placeholders, ellipses, or unfinished thoughts.
+- Surface A is descriptive only. No advice, no judgment, no interpretation.
 
-FRAMING PURPOSE:
-Write 1–3 complete sentences providing a high-level description of the day WITHOUT interpretation.
+FRAMING:
+Write 0 to 3 complete sentences.
+Each sentence must be fully formed.
+If the RAW entries do not clearly support this field, return an empty string.
+Do not summarize across days. Use only the provided RAW window.
 
-RULES:
-- Must be grounded in Context or Orientation.
-- Must remain concrete.
-- No abstract themes.
-- No emotional language.
-- If insufficient grounding exists, return an empty string.
-- Do not use bullets, lists, or leading symbols.
+Field intent: How the day was implicitly experienced or structured.
 
-EXAMPLES:
-Good:
-"The day centers on outbound communication related to Lucid."
+Must be grounded in Context or Orientation.
+Must remain concrete.
+No abstract themes.
+No emotional language.
 
-Bad:
-"The day reflects balancing professional and social priorities."
-
-Framing is optional. You may return no text.
-If you return text, it must be 1–3 short, complete sentences.
 Each sentence must be concrete and factual. It may summarize the day, but:
 - Must reference specific, observable elements (people, activities, events)
 - Must avoid abstraction like "considerations", "themes", "reflections", "thoughts"
@@ -489,54 +421,39 @@ function _buildReflectionPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-GLOBAL RULES:
-- Never give advice.
-- Never assign meaning or lessons.
-- Never motivate or reassure.
-- Never predict outcomes.
-- Never imply obligation.
-- Avoid abstract filler.
-- All sentences must end with terminal punctuation.
-- All sentences must be complete. No ellipses. No unfinished phrases.
-- Output must be entirely in a single language. Do not mix languages.
-- Use ONE language only. Do not mix languages.
+GLOBAL OUTPUT RULES (CRITICAL):
+- Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
-- Do not use bullet points, lists, or leading symbols.
-- Do not truncate sentences.
+- Do NOT use bullet points, lists, dashes, or leading symbols.
+- Do NOT truncate sentences.
 - Prefer fewer complete sentences over many partial ones.
-- If content is unclear, output less text, not unfinished text.
-- Each field may contain multiple sentences, but every sentence must be complete.
-- It is acceptable to return an empty string if no explicit reflection exists in RAW.
+- If information is insufficient, output an empty string for that field.
+- Never output placeholders, ellipses, or unfinished thoughts.
+- Surface A is descriptive only. No advice, no judgment, no interpretation.
 
-REFLECTION PURPOSE:
-Write 1–3 complete sentences surfacing explicit self-observation ONLY if directly stated in RAW.
+REFLECTION:
+Write 0 to 3 complete sentences.
+Each sentence must be fully formed.
+If the RAW entries do not clearly support this field, return an empty string.
+Do not summarize across days. Use only the provided RAW window.
 
-RULES:
-- Only include reflection if RAW contains explicit reflective language
+Field intent: Notable internal observations explicitly present in RAW.
+
+Only include reflection if RAW contains explicit reflective language
   (e.g., "I noticed…", "I felt…", "I realized…").
-- Never infer reflection.
-- Never resolve or explain emotions.
-- Silence is preferred over speculation.
-- Do not use bullets, lists, or leading symbols.
-
-EXAMPLES:
-Allowed:
-"I noticed lingering physical fatigue after training."
-
-If no such material exists, return an empty string.
-
-Reflection is optional. Return 1–3 complete reflective sentences, or return an empty string.
+Never infer reflection.
+Never resolve or explain emotions.
+Silence is preferred over speculation.
 
 Each reflection sentence must be one complete, self-contained sentence.
 Use reflective phrasing (observational, third-person) rather than diary phrasing (first-person, emotional).
 
-Requirements:
-- Each sentence must be complete and self-contained.
-- Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
-- If a complete sentence cannot be produced, omit the item entirely.
-- Preserve uncertainty, doubt, or open-endedness if present in RAW.
-- Ground each reflection strictly in what is explicitly stated in RAW.
-- Each sentence must end with terminal punctuation (. ! ?).
+Each sentence must be complete and self-contained.
+Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
+If a complete sentence cannot be produced, omit the item entirely.
+Preserve uncertainty, doubt, or open-endedness if present in RAW.
+Ground each reflection strictly in what is explicitly stated in RAW.
+Each sentence must end with terminal punctuation (. ! ?).
 
 Forbidden:
 - Do NOT add advice, conclusions, or meaning.
@@ -554,45 +471,30 @@ function _buildConstraintsPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-GLOBAL RULES:
-- Never give advice.
-- Never assign meaning or lessons.
-- Never motivate or reassure.
-- Never predict outcomes.
-- Never imply obligation.
-- Avoid abstract filler.
-- All sentences must end with terminal punctuation.
-- All sentences must be complete. No ellipses. No unfinished phrases.
-- Output must be entirely in a single language. Do not mix languages.
-- Use ONE language only. Do not mix languages.
+GLOBAL OUTPUT RULES (CRITICAL):
+- Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
-- Do not use bullet points, lists, or leading symbols.
-- Do not truncate sentences.
+- Do NOT use bullet points, lists, dashes, or leading symbols.
+- Do NOT truncate sentences.
 - Prefer fewer complete sentences over many partial ones.
-- If content is unclear, output less text, not unfinished text.
-- Each field may contain multiple sentences, but every sentence must be complete.
-- It is acceptable to return an empty string if no constraints exist.
+- If information is insufficient, output an empty string for that field.
+- Never output placeholders, ellipses, or unfinished thoughts.
+- Surface A is descriptive only. No advice, no judgment, no interpretation.
 
-CONSTRAINTS PURPOSE:
-Write 1–3 complete sentences recording mechanical or situational limits observed during the day.
+CONSTRAINTS:
+Write 0 to 3 complete sentences.
+Each sentence must be fully formed.
+If the RAW entries do not clearly support this field, return an empty string.
+Do not summarize across days. Use only the provided RAW window.
 
-RULES:
-- Descriptive only.
-- No advice.
-- No leverage language.
-- No interpretation.
-- May be empty if none are observed.
-- Do not use bullets, lists, or leading symbols.
+Field intent: Observed limitations (time, energy, availability, attention).
 
-EXAMPLES:
-Good:
-"Time limited by scheduled meetings. Availability constrained by travel."
+Descriptive only.
+No advice.
+No leverage language.
+No interpretation.
+May be empty if none are observed.
 
-Bad:
-"Should manage time better."
-"Leverage opportunities were limited."
-
-Return 1–3 complete sentences describing observed constraints, or return an empty string if none exist.
 Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
 If a complete sentence cannot be produced, return an empty string.
 End each sentence with a period if returning text.

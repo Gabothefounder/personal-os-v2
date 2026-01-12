@@ -158,6 +158,12 @@ function doGet(e) {
       case "list_commitments":
         return jsonResponse(listCommitments());
 
+      case "get_daily_brief":
+        return jsonResponse(getDailyBrief());
+
+      case "get_weekly_brief":
+        return jsonResponse(getWeeklyBrief());
+
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + action });
     }
@@ -196,4 +202,60 @@ function doOptions() {
     .setHeader("Access-Control-Allow-Origin", "*")
     .setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
     .setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function getDailyBrief() {
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const sheet = ss.getSheetByName('DAILY_VIEW');
+    
+    if (!sheet) {
+      return { ok: true, content: '', last_updated_at: null };
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    
+    if (data.length < 3) {
+      return { ok: true, content: '', last_updated_at: null };
+    }
+    
+    const lastUpdatedAt = data[0][0];
+    const content = data[2][0] || '';
+    
+    return {
+      ok: true,
+      content: String(content),
+      last_updated_at: lastUpdatedAt
+    };
+  } catch (e) {
+    return { ok: true, content: '', last_updated_at: null };
+  }
+}
+
+function getWeeklyBrief() {
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const sheet = ss.getSheetByName('WEEKLY_VIEW');
+    
+    if (!sheet) {
+      return { ok: true, content: '', last_updated_at: null };
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    
+    if (data.length < 3) {
+      return { ok: true, content: '', last_updated_at: null };
+    }
+    
+    const lastUpdatedAt = data[0][0];
+    const content = data[2][0] || '';
+    
+    return {
+      ok: true,
+      content: String(content),
+      last_updated_at: lastUpdatedAt
+    };
+  } catch (e) {
+    return { ok: true, content: '', last_updated_at: null };
+  }
 }

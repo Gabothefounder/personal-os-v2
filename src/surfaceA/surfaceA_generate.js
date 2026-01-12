@@ -37,14 +37,18 @@ function runDailySynthesis() {
     const context = _generateContext(rawNotes);
     const framing = _generateFraming(rawNotes);
     const reflection = _generateReflection(rawNotes);
+    const constraints = _generateConstraints(rawNotes);
 
     substrate = {
       orientation,
       attention,
       context,
       framing,
-      reflection
+      reflection,
+      constraints
     };
+    
+    _validateAndRegenerateTruncatedFields(substrate, rawNotes);
   } catch (e) {
     Logger.log('FIELD GENERATION/VALIDATION FAILED — Aborting. Previous substrate unchanged.');
     Logger.log(e.message);
@@ -196,6 +200,22 @@ function _generateReflection(rawNotes) {
   }
 }
 
+function _generateConstraints(rawNotes) {
+  try {
+    const prompt = _buildConstraintsPrompt(rawNotes);
+    Logger.log('CONSTRAINTS PROMPT BUILT');
+
+    const aiText = _callGemini(prompt);
+    Logger.log('=== CONSTRAINTS OUTPUT START ===');
+    Logger.log(aiText);
+    Logger.log('=== CONSTRAINTS OUTPUT END ===');
+
+    return _parseStringField(aiText, 'constraints');
+  } catch (e) {
+    return '';
+  }
+}
+
 // ================== PROMPTS ==================
 // ITERATION: Increased informational density while preserving restraint and non-interpretive tone.
 // Maintains CIA/M-style briefing tone, non-coaching language, and trust through omission.
@@ -242,6 +262,8 @@ GLOBAL RULES:
 - Never imply obligation.
 - Avoid abstract filler.
 - All sentences must end with terminal punctuation.
+- All sentences must be complete. No ellipses. No unfinished phrases.
+- Output must be entirely in a single language. Do not mix languages.
 - It is acceptable to return an empty string if no actions exist.
 
 ORIENTATION PURPOSE:
@@ -481,6 +503,48 @@ If a complete, reflective sentence cannot be produced safely, return an empty st
 No extra text.`;
 }
 
+function _buildConstraintsPrompt(rawNotes) {
+  return `RAW NOTES:
+${rawNotes.map(n => '- ' + n).join('\n')}
+
+GLOBAL RULES:
+- Never give advice.
+- Never assign meaning or lessons.
+- Never motivate or reassure.
+- Never predict outcomes.
+- Never imply obligation.
+- Avoid abstract filler.
+- All sentences must end with terminal punctuation.
+- All sentences must be complete. No ellipses. No unfinished phrases.
+- Output must be entirely in a single language. Do not mix languages.
+- It is acceptable to return an empty string if no constraints exist.
+
+CONSTRAINTS PURPOSE:
+Record mechanical or situational limits observed during the day.
+
+RULES:
+- Descriptive only.
+- No advice.
+- No leverage language.
+- No interpretation.
+- May be empty if none are observed.
+
+EXAMPLES:
+Good:
+"Time limited by scheduled meetings. Availability constrained by travel."
+
+Bad:
+"Should manage time better."
+"Leverage opportunities were limited."
+
+Return exactly one sentence describing observed constraints, or return an empty string if none exist.
+Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
+If a complete sentence cannot be produced, return an empty string.
+End the sentence with a period if returning text.
+Stop after the sentence or empty string.
+No extra text.`;
+}
+
 // ================== PARSERS ==================
 function _parseOrientation(text) {
   if (!text || !text.trim()) {
@@ -547,18 +611,24 @@ function _parseReflection(text) {
 
 function _parseStringField(text, fieldName) {
   if (!text || !text.trim()) {
+    if (fieldName === 'constraints') {
+      return '';
+    }
     throw new Error('EMPTY ' + fieldName.toUpperCase() + ' TEXT — Cannot parse ' + fieldName);
   }
 
   const trimmed = text.trim();
 
   if (trimmed.length === 0) {
+    if (fieldName === 'constraints') {
+      return '';
+    }
     throw new Error('INVALID ' + fieldName.toUpperCase() + ' — Must be a non-empty string');
   }
 
-  // Require complete sentence ending for context and framing
-  if (fieldName === 'context' || fieldName === 'framing') {
-    if (!trimmed.match(/[.!?]$/)) {
+  // Require complete sentence ending for context, framing, and constraints
+  if (fieldName === 'context' || fieldName === 'framing' || fieldName === 'constraints') {
+    if (trimmed.length > 0 && !trimmed.match(/[.!?]$/)) {
       throw new Error('INVALID ' + fieldName.toUpperCase() + ' — Must end with sentence punctuation: "' + trimmed + '"');
     }
   }
@@ -566,6 +636,100 @@ function _parseStringField(text, fieldName) {
   return trimmed;
 }
 
+function _validateAndRegenerateTruncatedFields(substrate, rawNotes) {
+  if (substrate.attention && typeof substrate.attention === 'string' && _isTruncated(substrate.attention)) {
+    try {
+      substrate.attention = _generateAttention(rawNotes);
+    } catch (e) {
+      substrate.attention = '';
+    }
+  }
+  
+  if (substrate.context && typeof substrate.context === 'string' && _isTruncated(substrate.context)) {
+    try {
+      substrate.context = _generateContext(rawNotes);
+    } catch (e) {
+      substrate.context = '';
+    }
+  }
+  
+  if (substrate.framing && typeof substrate.framing === 'string' && _isTruncated(substrate.framing)) {
+    try {
+      substrate.framing = _generateFraming(rawNotes);
+    } catch (e) {
+      substrate.framing = '';
+    }
+  }
+  
+  if (substrate.constraints && typeof substrate.constraints === 'string' && _isTruncated(substrate.constraints)) {
+    try {
+      substrate.constraints = _generateConstraints(rawNotes);
+    } catch (e) {
+      substrate.constraints = '';
+    }
+  }
+  
+  if (Array.isArray(substrate.orientation)) {
+    let needsRegeneration = false;
+    for (let i = 0; i < substrate.orientation.length; i++) {
+      if (_isTruncated(substrate.orientation[i])) {
+        needsRegeneration = true;
+        break;
+      }
+    }
+    if (needsRegeneration) {
+      try {
+        substrate.orientation = _generateOrientation(rawNotes);
+      } catch (e) {
+        substrate.orientation = [];
+      }
+    }
+  }
+  
+  if (Array.isArray(substrate.reflection)) {
+    let needsRegeneration = false;
+    for (let i = 0; i < substrate.reflection.length; i++) {
+      if (_isTruncated(substrate.reflection[i])) {
+        needsRegeneration = true;
+        break;
+      }
+    }
+    if (needsRegeneration) {
+      try {
+        substrate.reflection = _generateReflection(rawNotes);
+      } catch (e) {
+        substrate.reflection = [];
+      }
+    }
+  }
+}
+
+function _isTruncated(text) {
+  if (!text || typeof text !== 'string') {
+    return false;
+  }
+  
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
+  
+  if (trimmed.endsWith('...') || trimmed.endsWith('…')) {
+    return true;
+  }
+  
+  if (!trimmed.match(/[.!?]$/)) {
+    if (trimmed.length > 10) {
+      return true;
+    }
+  }
+  
+  if (trimmed.endsWith(',') || trimmed.endsWith(';') || trimmed.endsWith(':')) {
+    return true;
+  }
+  
+  return false;
+}
 
 // ================== WRITE OUTPUT ==================
 function _writeSurfaceASubstrate(substrate, status) {
@@ -577,7 +741,7 @@ function _writeSurfaceASubstrate(substrate, status) {
     ? substrate.reflection.map(x => '• ' + x).join('\n')
     : '';
 
-  sheet.getRange(1, 1, 9, 2).setValues([
+  sheet.getRange(1, 1, 8, 2).setValues([
     ['generated_at', now],
     ['timeframe', 'Today'],
     ['orientation', orientationText],
@@ -585,7 +749,7 @@ function _writeSurfaceASubstrate(substrate, status) {
     ['context', substrate.context],
     ['framing', substrate.framing],
     ['reflection', reflectionText],
-    ['control', 'Continue · Dig deeper · Pause'],
+    ['constraints', substrate.constraints || ''],
     ['last_run_status', status]
   ]);
 }
@@ -596,8 +760,14 @@ function _appendSurfaceAArchive(substrate) {
   const data = sheet.getDataRange().getValues();
   
   if (data.length === 0) {
-    const header = ['archived_at', 'run_id', 'orientation', 'attention', 'context', 'framing', 'reflection'];
+    const header = ['archived_at', 'run_id', 'orientation', 'attention', 'context', 'framing', 'reflection', 'constraints'];
     sheet.getRange(1, 1, 1, header.length).setValues([header]);
+  } else {
+    const headerRow = data[0];
+    if (headerRow.indexOf('constraints') === -1) {
+      const lastCol = sheet.getLastColumn();
+      sheet.getRange(1, lastCol + 1).setValue('constraints');
+    }
   }
   
   const now = new Date();
@@ -607,8 +777,19 @@ function _appendSurfaceAArchive(substrate) {
   const contextText = String(substrate.context || '');
   const framingText = String(substrate.framing || '');
   const reflectionText = Array.isArray(substrate.reflection) ? substrate.reflection.join('\n') : String(substrate.reflection || '');
+  const constraintsText = String(substrate.constraints || '');
+  
+  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const constraintsIdx = headerRow.indexOf('constraints');
   
   const row = [now, runId, orientationText, attentionText, contextText, framingText, reflectionText];
+  if (constraintsIdx >= 0) {
+    while (row.length < constraintsIdx) {
+      row.push('');
+    }
+    row[constraintsIdx] = constraintsText;
+  }
+  
   sheet.appendRow(row);
 }
 

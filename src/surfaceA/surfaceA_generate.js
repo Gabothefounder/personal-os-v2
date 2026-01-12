@@ -35,25 +35,9 @@ function runDailySynthesis() {
 
   let substrate;
   try {
-    const orientation = _generateOrientation(rawNotes);
-    const attention = _generateAttention(rawNotes);
-    const context = _generateContext(rawNotes);
-    const framing = _generateFraming(rawNotes);
-    const reflection = _generateReflection(rawNotes);
-    const constraints = _generateConstraints(rawNotes);
-
-    substrate = {
-      orientation,
-      attention,
-      context,
-      framing,
-      reflection,
-      constraints
-    };
-    
-    _validateAndRegenerateTruncatedFields(substrate, rawNotes);
+    substrate = _generateSurfaceASubstrate(rawNotes);
   } catch (e) {
-    Logger.log('FIELD GENERATION/VALIDATION FAILED — Aborting. Previous substrate unchanged.');
+    Logger.log('SURFACE A SYNTHESIS FAILED — Aborting. Previous substrate unchanged.');
     Logger.log(e.message);
     return;
   }
@@ -71,6 +55,145 @@ function runDailySynthesis() {
   }
 
   Logger.log('--- DAILY SYNTHESIS END ---');
+}
+
+// ================== SINGLE-PASS SYNTHESIS ==================
+function _generateSurfaceASubstrate(rawNotes) {
+  const prompt = _buildUnifiedSurfaceAPrompt(rawNotes);
+  Logger.log('SURFACE A UNIFIED PROMPT BUILT');
+
+  const aiText = _callGemini(prompt);
+  Logger.log('=== SURFACE A OUTPUT START ===');
+  Logger.log(aiText);
+  Logger.log('=== SURFACE A OUTPUT END ===');
+
+  const substrate = _parseSurfaceAJSON(aiText);
+  
+  return substrate;
+}
+
+function _buildUnifiedSurfaceAPrompt(rawNotes) {
+  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
+    ? 'All output must be written in French. Do not switch languages.'
+    : 'All output must be written in English. Do not switch languages.';
+  
+  return `RAW NOTES:
+${rawNotes.map(n => '- ' + n).join('\n')}
+
+GLOBAL OUTPUT RULES (CRITICAL):
+- ${langInstruction}
+- Use ONE language only for all fields. Do not mix languages.
+- Write in complete sentences only.
+- Do NOT use bullet points, lists, dashes, or leading symbols.
+- Do NOT truncate sentences.
+- Prefer fewer complete sentences over many partial ones.
+- If information is insufficient, output an empty string for that field.
+- Never output placeholders, ellipses, or unfinished thoughts.
+- Surface A is descriptive only. No advice, no judgment, no interpretation.
+
+OUTPUT REQUIREMENTS:
+Return ONLY valid JSON.
+All values must be strings.
+Each value must be 0–3 complete sentences.
+Use ONE language only.
+Do not use bullets or lists.
+If unsupported by RAW, return "".
+
+FIELD DEFINITIONS:
+- orientation: What the day was broadly oriented around, if observable.
+- attention: Where cognitive or emotional attention was primarily directed.
+- context: Factual situational backdrop (events, people, circumstances).
+- framing: How the day was implicitly experienced or structured.
+- reflection: Notable internal observations explicitly present in RAW.
+- constraints: Observed limitations (time, energy, availability, attention).
+
+REQUIRED JSON SCHEMA:
+{
+  "orientation": "",
+  "attention": "",
+  "context": "",
+  "framing": "",
+  "reflection": "",
+  "constraints": ""
+}
+
+Return ONLY the JSON object. No explanation. No markdown. No code blocks.`;
+}
+
+function _parseSurfaceAJSON(text) {
+  let jsonText = text.trim();
+  
+  // Remove markdown code blocks if present
+  jsonText = jsonText.replace(/^```json\s*/i, '');
+  jsonText = jsonText.replace(/^```\s*/i, '');
+  jsonText = jsonText.replace(/\s*```$/i, '');
+  jsonText = jsonText.trim();
+  
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (e) {
+    throw new Error('INVALID JSON — Failed to parse Surface A output: ' + e.message);
+  }
+  
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('INVALID JSON — Surface A output is not an object');
+  }
+  
+  const substrate = {
+    orientation: _sanitizeField(parsed.orientation),
+    attention: _sanitizeField(parsed.attention),
+    context: _sanitizeField(parsed.context),
+    framing: _sanitizeField(parsed.framing),
+    reflection: _sanitizeField(parsed.reflection),
+    constraints: _sanitizeField(parsed.constraints)
+  };
+  
+  return substrate;
+}
+
+function _sanitizeField(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  
+  let text = String(value).trim();
+  
+  if (text.length === 0) {
+    return '';
+  }
+  
+  // Remove leading bullet symbols
+  text = text.replace(/^[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/g, '');
+  text = text.replace(/^[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/gm, '');
+  
+  // Remove leading/trailing quotation marks
+  text = text.replace(/^["'`«»„‚]/g, '');
+  text = text.replace(/["'`«»„‚]$/g, '');
+  
+  text = text.trim();
+  
+  // If output ends mid-sentence (no punctuation), discard the fragment
+  if (text.length > 0 && !/[.!?]$/.test(text[text.length - 1])) {
+    const lastSentenceEnd = Math.max(
+      text.lastIndexOf('.'),
+      text.lastIndexOf('!'),
+      text.lastIndexOf('?')
+    );
+    if (lastSentenceEnd >= 0) {
+      text = text.substring(0, lastSentenceEnd + 1);
+    } else {
+      return '';
+    }
+  }
+  
+  text = text.trim();
+  
+  if (text.length === 0 || text.length < 3) {
+    return '';
+  }
+  
+  return text;
 }
 
 // ================== GEMINI CALL ==================
@@ -97,7 +220,7 @@ function _callGemini(promptText) {
     ],
     generationConfig: {
       temperature: 0.2,
-      maxOutputTokens: 500
+      maxOutputTokens: 1000
     }
   };
 
@@ -126,676 +249,21 @@ function _callGemini(promptText) {
   return text.trim();
 }
 
-// ================== FIELD GENERATION ==================
-function _generateOrientation(rawNotes) {
-  const prompt = _buildOrientationPrompt(rawNotes);
-  Logger.log('ORIENTATION PROMPT BUILT');
-
-  const aiText = _callGemini(prompt);
-  Logger.log('=== ORIENTATION OUTPUT START ===');
-  Logger.log(aiText);
-  Logger.log('=== ORIENTATION OUTPUT END ===');
-
-  const sanitized = _sanitizeSurfaceAOutput(aiText);
-  return _parseOrientation(sanitized);
-}
-
-function _generateAttention(rawNotes) {
-  try {
-    const prompt = _buildAttentionPrompt(rawNotes);
-    Logger.log('ATTENTION PROMPT BUILT');
-
-    const aiText = _callGemini(prompt);
-    Logger.log('=== ATTENTION OUTPUT START ===');
-    Logger.log(aiText);
-    Logger.log('=== ATTENTION OUTPUT END ===');
-
-    const sanitized = _sanitizeSurfaceAOutput(aiText);
-    return _parseStringField(sanitized, 'attention');
-  } catch (e) {
-    return '';
-  }
-}
-
-function _generateContext(rawNotes) {
-  try {
-    const prompt = _buildContextPrompt(rawNotes);
-    Logger.log('CONTEXT PROMPT BUILT');
-
-    const aiText = _callGemini(prompt);
-    Logger.log('=== CONTEXT OUTPUT START ===');
-    Logger.log(aiText);
-    Logger.log('=== CONTEXT OUTPUT END ===');
-
-    const sanitized = _sanitizeSurfaceAOutput(aiText);
-    return _parseStringField(sanitized, 'context');
-  } catch (e) {
-    return '';
-  }
-}
-
-function _generateFraming(rawNotes) {
-  try {
-    const prompt = _buildFramingPrompt(rawNotes);
-    Logger.log('FRAMING PROMPT BUILT');
-
-    const aiText = _callGemini(prompt);
-    Logger.log('=== FRAMING OUTPUT START ===');
-    Logger.log(aiText);
-    Logger.log('=== FRAMING OUTPUT END ===');
-
-    const sanitized = _sanitizeSurfaceAOutput(aiText);
-    return _parseStringField(sanitized, 'framing');
-  } catch (e) {
-    return '';
-  }
-}
-
-function _generateReflection(rawNotes) {
-  try {
-    const prompt = _buildReflectionPrompt(rawNotes);
-    Logger.log('REFLECTION PROMPT BUILT');
-
-    const aiText = _callGemini(prompt);
-    Logger.log('=== REFLECTION OUTPUT START ===');
-    Logger.log(aiText);
-    Logger.log('=== REFLECTION OUTPUT END ===');
-
-    const sanitized = _sanitizeSurfaceAOutput(aiText);
-    return _parseReflection(sanitized);
-  } catch (e) {
-    return [];
-  }
-}
-
-function _generateConstraints(rawNotes) {
-  try {
-    const prompt = _buildConstraintsPrompt(rawNotes);
-    Logger.log('CONSTRAINTS PROMPT BUILT');
-
-    const aiText = _callGemini(prompt);
-    Logger.log('=== CONSTRAINTS OUTPUT START ===');
-    Logger.log(aiText);
-    Logger.log('=== CONSTRAINTS OUTPUT END ===');
-
-    const sanitized = _sanitizeSurfaceAOutput(aiText);
-    return _parseStringField(sanitized, 'constraints');
-  } catch (e) {
-    return '';
-  }
-}
-
-// ================== PROMPTS ==================
-// ITERATION: Increased informational density while preserving restraint and non-interpretive tone.
-// Maintains CIA/M-style briefing tone, non-coaching language, and trust through omission.
-//
-// ORIENTATION (max 3, deduplication, scoping):
-//   - Prevents: truncated bullets like "Send a report" (incomplete scope)
-//   - Prevents: duplicate items with same verb+object (redundancy)
-//   - Prevents: vague items missing who/what/when (unclear scope)
-//   - Examples show complete vs incomplete bullets
-//
-// CONTEXT (concrete facts only, empty allowed):
-//   - Prevents: internal state language ("pursuing", "deprioritized", "expected")
-//   - Prevents: abstraction ("considerations", "themes") instead of concrete facts
-//   - Examples show concrete facts vs abstract summaries
-//
-// ATTENTION (descriptive, not prescriptive):
-//   - Allows: light evaluative framing if explicitly in RAW (entertainment vs serious)
-//   - Prevents: advice, expectation-setting, psychological diagnosis, moral judgment
-//   - Examples show allowed descriptive vs forbidden prescriptive language
-//
-// FRAMING (grounded in Context/Orientation, concrete):
-//   - Prevents: abstract themes ("balancing priorities") replacing concrete description
-//   - Requires grounding in Context or Orientation
-//   - Examples show concrete framing vs abstract interpretation
-//
-// REFLECTION (explicit RAW only, silence preferred):
-//   - Only includes if RAW contains explicit reflective language ("I noticed...", "I felt...")
-//   - Prevents: inferring reflection, resolving emotions, speculation
-//   - Silence preferred over abstraction
-//
-// GENERAL (reinforced across all):
-//   - Never: advice, meaning assignment, motivation, reassurance, prediction, obligation
-//   - Silence is not failure. Omission preferred to abstraction.
-
-function _buildOrientationPrompt(rawNotes) {
-  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
-    ? 'All output must be written in French. Do not switch languages.'
-    : 'All output must be written in English. Do not switch languages.';
-  
-  return `RAW NOTES:
-${rawNotes.map(n => '- ' + n).join('\n')}
-
-GLOBAL OUTPUT RULES (CRITICAL):
-- ${langInstruction}
-- Use ONE language only for all fields. Do not mix languages.
-- Write in complete sentences only.
-- Do NOT use bullet points, lists, dashes, or leading symbols.
-- Do NOT truncate sentences.
-- Prefer fewer complete sentences over many partial ones.
-- If information is insufficient, output an empty string for that field.
-- Never output placeholders, ellipses, or unfinished thoughts.
-- Surface A is descriptive only. No advice, no judgment, no interpretation.
-
-ORIENTATION:
-Write 0 to 3 complete sentences.
-Each sentence must be fully formed.
-If the RAW entries do not clearly support this field, return an empty string.
-Do not summarize across days. Use only the provided RAW window.
-
-Field intent: What the day was broadly oriented around, if observable.
-
-Each sentence must be concrete, action-oriented, and complete.
-Sentences must NOT end with conjunctions (and, or), prepositions (to, for, with), or auxiliary verbs.
-If an action cannot be completed cleanly, it MUST be omitted rather than truncated.
-DO NOT output incomplete sentences like "Send a report" — either include full scope or omit entirely.
-
-Sentences must describe observable actions, reviews, or concrete focus areas grounded in RAW.
-Focus on operational orientation, not micro-action fragments.
-Do NOT describe internal judgments, interpretations, or abstract goals.
-Do NOT add prioritization, advice, or interpretation.
-No numbering, bullets, or extra text.`;
-}
-
-function _buildAttentionPrompt(rawNotes) {
-  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
-    ? 'All output must be written in French. Do not switch languages.'
-    : 'All output must be written in English. Do not switch languages.';
-  
-  return `RAW NOTES:
-${rawNotes.map(n => '- ' + n).join('\n')}
-
-GLOBAL OUTPUT RULES (CRITICAL):
-- ${langInstruction}
-- Use ONE language only for all fields. Do not mix languages.
-- Write in complete sentences only.
-- Do NOT use bullet points, lists, dashes, or leading symbols.
-- Do NOT truncate sentences.
-- Prefer fewer complete sentences over many partial ones.
-- If information is insufficient, output an empty string for that field.
-- Never output placeholders, ellipses, or unfinished thoughts.
-- Surface A is descriptive only. No advice, no judgment, no interpretation.
-
-ATTENTION:
-Write 0 to 3 complete sentences.
-Each sentence must be fully formed.
-If the RAW entries do not clearly support this field, return an empty string.
-Do not summarize across days. Use only the provided RAW window.
-
-Field intent: Where cognitive or emotional attention was primarily directed.
-
-Must be descriptive, not prescriptive.
-May reference people if they appear in RAW.
-May include light evaluative framing (e.g., entertainment vs serious),
-  but must avoid:
-  - advice
-  - expectation-setting
-  - psychological diagnosis
-  - moral judgment
-
-Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
-If a complete sentence cannot be produced, return an empty string.
-End each sentence with a period if returning text.
-Stop after the sentences or empty string.
-No extra text.`;
-}
-
-function _buildContextPrompt(rawNotes) {
-  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
-    ? 'All output must be written in French. Do not switch languages.'
-    : 'All output must be written in English. Do not switch languages.';
-  
-  return `RAW NOTES:
-${rawNotes.map(n => '- ' + n).join('\n')}
-
-GLOBAL OUTPUT RULES (CRITICAL):
-- ${langInstruction}
-- Use ONE language only for all fields. Do not mix languages.
-- Write in complete sentences only.
-- Do NOT use bullet points, lists, dashes, or leading symbols.
-- Do NOT truncate sentences.
-- Prefer fewer complete sentences over many partial ones.
-- If information is insufficient, output an empty string for that field.
-- Never output placeholders, ellipses, or unfinished thoughts.
-- Surface A is descriptive only. No advice, no judgment, no interpretation.
-
-CONTEXT:
-Write 0 to 3 complete sentences.
-Each sentence must be fully formed.
-If the RAW entries do not clearly support this field, return an empty string.
-Do not summarize across days. Use only the provided RAW window.
-
-Field intent: Factual situational backdrop (events, people, circumstances).
-
-Only include observable events, actions, or references.
-No internal states, intentions, or abstractions.
-No relationship evaluation.
-
-Each sentence must report concrete situational facts only: people, communications, obligations, events.
-Each sentence MUST reference at least one concrete noun (person, message, document, payment, event).
-Abstract summaries of the day are NOT allowed.
-Narrative phrasing (e.g., "a day of", "thoughts unfolded", "reflections") is forbidden.
-Reference specific, observable nouns from RAW (people, projects, objects, constraints, institutions).
-
-FORBIDDEN WORDS AND PHRASES (these indicate internal states, not facts):
-- "focused on", "pursuing", "prioritizing", "deprioritized", "expected"
-- "considerations", "themes", "reflections", "thoughts"
-- Any language describing intentions, motivations, or internal states
-
-Do NOT include emotional states, reflections, or narrative phrasing.
-Do not summarize emotions, meaning, or internal states.
-Do not generalize or interpret.
-Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
-If a complete sentence cannot be produced, return an empty string.
-If no concrete external facts are available, return an empty string.
-End each sentence with a period if returning text.
-Stop immediately after the sentences or empty string.
-No extra text.`;
-}
-
-function _buildFramingPrompt(rawNotes) {
-  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
-    ? 'All output must be written in French. Do not switch languages.'
-    : 'All output must be written in English. Do not switch languages.';
-  
-  return `RAW NOTES:
-${rawNotes.map(n => '- ' + n).join('\n')}
-
-GLOBAL OUTPUT RULES (CRITICAL):
-- ${langInstruction}
-- Use ONE language only for all fields. Do not mix languages.
-- Write in complete sentences only.
-- Do NOT use bullet points, lists, dashes, or leading symbols.
-- Do NOT truncate sentences.
-- Prefer fewer complete sentences over many partial ones.
-- If information is insufficient, output an empty string for that field.
-- Never output placeholders, ellipses, or unfinished thoughts.
-- Surface A is descriptive only. No advice, no judgment, no interpretation.
-
-FRAMING:
-Write 0 to 3 complete sentences.
-Each sentence must be fully formed.
-If the RAW entries do not clearly support this field, return an empty string.
-Do not summarize across days. Use only the provided RAW window.
-
-Field intent: How the day was implicitly experienced or structured.
-
-Must be grounded in Context or Orientation.
-Must remain concrete.
-No abstract themes.
-No emotional language.
-
-Each sentence must be concrete and factual. It may summarize the day, but:
-- Must reference specific, observable elements (people, activities, events)
-- Must avoid abstraction like "considerations", "themes", "reflections", "thoughts"
-- Must avoid vague containers like "a day of" or "involved"
-
-The sentences should hold the shape of the day, not explain it.
-Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
-If a complete sentence cannot be produced, return an empty string.
-Avoid conjunctions ("and", "but", "which", "while").
-Avoid abstraction and explanation.
-Do not motivate, advise, summarize, or interpret.
-Do not use quotes or reference external authors.
-Do not introduce insight or conclusions.
-The framing should feel like quiet container sentences that could be read aloud without pressure.
-End each sentence with terminal punctuation (. ! ?) if returning text.
-Stop immediately after the sentences or empty string.
-If a complete sentence cannot be produced safely, return an empty string.
-No extra text.`;
-}
-
-function _buildReflectionPrompt(rawNotes) {
-  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
-    ? 'All output must be written in French. Do not switch languages.'
-    : 'All output must be written in English. Do not switch languages.';
-  
-  return `RAW NOTES:
-${rawNotes.map(n => '- ' + n).join('\n')}
-
-GLOBAL OUTPUT RULES (CRITICAL):
-- ${langInstruction}
-- Use ONE language only for all fields. Do not mix languages.
-- Write in complete sentences only.
-- Do NOT use bullet points, lists, dashes, or leading symbols.
-- Do NOT truncate sentences.
-- Prefer fewer complete sentences over many partial ones.
-- If information is insufficient, output an empty string for that field.
-- Never output placeholders, ellipses, or unfinished thoughts.
-- Surface A is descriptive only. No advice, no judgment, no interpretation.
-
-REFLECTION:
-Write 0 to 3 complete sentences.
-Each sentence must be fully formed.
-If the RAW entries do not clearly support this field, return an empty string.
-Do not summarize across days. Use only the provided RAW window.
-
-Field intent: Notable internal observations explicitly present in RAW.
-
-Only include reflection if RAW contains explicit reflective language
-  (e.g., "I noticed…", "I felt…", "I realized…").
-Never infer reflection.
-Never resolve or explain emotions.
-Silence is preferred over speculation.
-
-Each reflection sentence must be one complete, self-contained sentence.
-Use reflective phrasing (observational, third-person) rather than diary phrasing (first-person, emotional).
-
-Each sentence must be complete and self-contained.
-Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
-If a complete sentence cannot be produced, omit the item entirely.
-Preserve uncertainty, doubt, or open-endedness if present in RAW.
-Ground each reflection strictly in what is explicitly stated in RAW.
-Each sentence must end with terminal punctuation (. ! ?).
-
-Forbidden:
-- Do NOT add advice, conclusions, or meaning.
-- Do NOT resolve emotions or provide closure.
-- Do NOT use first-person emotional phrasing ("I feel", "I think", "I'm worried") unless explicitly present in RAW.
-- Do NOT use continuation phrases ("it feels like", "I think that", "I haven't").
-- Do NOT add interpretation beyond what RAW explicitly states.
-
-If no explicit reflective material exists in RAW, return an empty string.
-If a complete, reflective sentence cannot be produced safely, return an empty string.
-No extra text.`;
-}
-
-function _buildConstraintsPrompt(rawNotes) {
-  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
-    ? 'All output must be written in French. Do not switch languages.'
-    : 'All output must be written in English. Do not switch languages.';
-  
-  return `RAW NOTES:
-${rawNotes.map(n => '- ' + n).join('\n')}
-
-GLOBAL OUTPUT RULES (CRITICAL):
-- ${langInstruction}
-- Use ONE language only for all fields. Do not mix languages.
-- Write in complete sentences only.
-- Do NOT use bullet points, lists, dashes, or leading symbols.
-- Do NOT truncate sentences.
-- Prefer fewer complete sentences over many partial ones.
-- If information is insufficient, output an empty string for that field.
-- Never output placeholders, ellipses, or unfinished thoughts.
-- Surface A is descriptive only. No advice, no judgment, no interpretation.
-
-CONSTRAINTS:
-Write 0 to 3 complete sentences.
-Each sentence must be fully formed.
-If the RAW entries do not clearly support this field, return an empty string.
-Do not summarize across days. Use only the provided RAW window.
-
-Field intent: Observed limitations (time, energy, availability, attention).
-
-Descriptive only.
-No advice.
-No leverage language.
-No interpretation.
-May be empty if none are observed.
-
-Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
-If a complete sentence cannot be produced, return an empty string.
-End each sentence with a period if returning text.
-Stop after the sentences or empty string.
-No extra text.`;
-}
-
-// ================== SANITATION ==================
-function _sanitizeSurfaceAOutput(text) {
-  if (!text || typeof text !== 'string') {
-    return '';
-  }
-  
-  let cleaned = text.trim();
-  
-  if (cleaned.length === 0) {
-    return '';
-  }
-  
-  // Remove leading bullet symbols (•, -, *, and variations)
-  cleaned = cleaned.replace(/^[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/g, '');
-  cleaned = cleaned.replace(/^[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/gm, '');
-  
-  // Remove leading/trailing quotation marks
-  cleaned = cleaned.replace(/^["'`«»„‚]/g, '');
-  cleaned = cleaned.replace(/["'`«»„‚]$/g, '');
-  
-  // Trim whitespace
-  cleaned = cleaned.trim();
-  
-  // Flatten bullet-style line breaks into sentences
-  // Replace line breaks that look like list items with sentence separators
-  cleaned = cleaned.replace(/\n[\s]*[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/g, '. ');
-  cleaned = cleaned.replace(/\n[\s]*[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/g, '. ');
-  
-  // If output ends mid-sentence (no punctuation), discard the fragment
-  const lastChar = cleaned[cleaned.length - 1];
-  if (cleaned.length > 0 && !/[.!?]$/.test(lastChar)) {
-    // Find last complete sentence
-    const lastSentenceEnd = Math.max(
-      cleaned.lastIndexOf('.'),
-      cleaned.lastIndexOf('!'),
-      cleaned.lastIndexOf('?')
-    );
-    if (lastSentenceEnd >= 0) {
-      cleaned = cleaned.substring(0, lastSentenceEnd + 1);
-    } else {
-      // No complete sentences found, discard
-      return '';
-    }
-  }
-  
-  cleaned = cleaned.trim();
-  
-  // If sanitation results in empty or unsafe text, return empty string
-  if (cleaned.length === 0 || cleaned.length < 3) {
-    return '';
-  }
-  
-  return cleaned;
-}
-
-// ================== PARSERS ==================
-function _parseOrientation(text) {
-  if (!text || !text.trim()) {
-    throw new Error('EMPTY ORIENTATION TEXT — Cannot parse orientation');
-  }
-
-  const sentences = text.trim().split(/[.!?]+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-
-  if (sentences.length === 0) {
-    throw new Error('INVALID ORIENTATION — No sentences found');
-  }
-
-  if (sentences.length < 1 || sentences.length > 3) {
-    throw new Error('INVALID ORIENTATION — Must have 1–3 sentences');
-  }
-
-  for (let i = 0; i < sentences.length; i++) {
-    const sentence = sentences[i];
-    
-    if (sentence.length < 5) {
-      throw new Error('INVALID ORIENTATION — Sentence too short: "' + sentence + '"');
-    }
-    
-    if (sentence.endsWith(',') || sentence.endsWith(';') || sentence.endsWith(':')) {
-      throw new Error('INVALID ORIENTATION — Sentence appears incomplete: "' + sentence + '"');
-    }
-  }
-
-  return sentences;
-}
-
-function _parseReflection(text) {
-  if (!text || !text.trim()) {
-    return [];
-  }
-
-  const sentences = text.trim().split(/[.!?]+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-
-  if (sentences.length > 3) {
-    throw new Error('INVALID REFLECTION — Must have 0–3 sentences, found ' + sentences.length);
-  }
-
-  for (let i = 0; i < sentences.length; i++) {
-    const sentence = sentences[i];
-    
-    if (sentence.length < 5) {
-      throw new Error('INVALID REFLECTION — Sentence too short: "' + sentence + '"');
-    }
-    
-    if (sentence.endsWith(',') || sentence.endsWith(';') || sentence.endsWith(':')) {
-      throw new Error('INVALID REFLECTION — Sentence appears incomplete: "' + sentence + '"');
-    }
-  }
-
-  return sentences;
-}
-
-function _parseStringField(text, fieldName) {
-  if (!text || !text.trim()) {
-    if (fieldName === 'constraints') {
-      return '';
-    }
-    throw new Error('EMPTY ' + fieldName.toUpperCase() + ' TEXT — Cannot parse ' + fieldName);
-  }
-
-  const trimmed = text.trim();
-
-  if (trimmed.length === 0) {
-    if (fieldName === 'constraints') {
-      return '';
-    }
-    throw new Error('INVALID ' + fieldName.toUpperCase() + ' — Must be a non-empty string');
-  }
-
-  // Require complete sentence ending for context, framing, and constraints
-  if (fieldName === 'context' || fieldName === 'framing' || fieldName === 'constraints') {
-    if (trimmed.length > 0 && !trimmed.match(/[.!?]$/)) {
-      throw new Error('INVALID ' + fieldName.toUpperCase() + ' — Must end with sentence punctuation: "' + trimmed + '"');
-    }
-  }
-
-  return trimmed;
-}
-
-function _validateAndRegenerateTruncatedFields(substrate, rawNotes) {
-  if (substrate.attention && typeof substrate.attention === 'string' && _isTruncated(substrate.attention)) {
-    try {
-      substrate.attention = _generateAttention(rawNotes);
-    } catch (e) {
-      substrate.attention = '';
-    }
-  }
-  
-  if (substrate.context && typeof substrate.context === 'string' && _isTruncated(substrate.context)) {
-    try {
-      substrate.context = _generateContext(rawNotes);
-    } catch (e) {
-      substrate.context = '';
-    }
-  }
-  
-  if (substrate.framing && typeof substrate.framing === 'string' && _isTruncated(substrate.framing)) {
-    try {
-      substrate.framing = _generateFraming(rawNotes);
-    } catch (e) {
-      substrate.framing = '';
-    }
-  }
-  
-  if (substrate.constraints && typeof substrate.constraints === 'string' && _isTruncated(substrate.constraints)) {
-    try {
-      substrate.constraints = _generateConstraints(rawNotes);
-    } catch (e) {
-      substrate.constraints = '';
-    }
-  }
-  
-  if (Array.isArray(substrate.orientation)) {
-    let needsRegeneration = false;
-    for (let i = 0; i < substrate.orientation.length; i++) {
-      if (_isTruncated(substrate.orientation[i])) {
-        needsRegeneration = true;
-        break;
-      }
-    }
-    if (needsRegeneration) {
-      try {
-        substrate.orientation = _generateOrientation(rawNotes);
-      } catch (e) {
-        substrate.orientation = [];
-      }
-    }
-  }
-  
-  if (Array.isArray(substrate.reflection)) {
-    let needsRegeneration = false;
-    for (let i = 0; i < substrate.reflection.length; i++) {
-      if (_isTruncated(substrate.reflection[i])) {
-        needsRegeneration = true;
-        break;
-      }
-    }
-    if (needsRegeneration) {
-      try {
-        substrate.reflection = _generateReflection(rawNotes);
-      } catch (e) {
-        substrate.reflection = [];
-      }
-    }
-  }
-}
-
-function _isTruncated(text) {
-  if (!text || typeof text !== 'string') {
-    return false;
-  }
-  
-  const trimmed = text.trim();
-  if (trimmed.length === 0) {
-    return false;
-  }
-  
-  if (trimmed.endsWith('...') || trimmed.endsWith('…')) {
-    return true;
-  }
-  
-  if (!trimmed.match(/[.!?]$/)) {
-    if (trimmed.length > 10) {
-      return true;
-    }
-  }
-  
-  if (trimmed.endsWith(',') || trimmed.endsWith(';') || trimmed.endsWith(':')) {
-    return true;
-  }
-  
-  return false;
-}
-
 // ================== WRITE OUTPUT ==================
 function _writeSurfaceASubstrate(substrate, status) {
   const sheet = _getSheetOrFail(SURFACEA_GEN_TAB_SURFACE_A);
   const now = new Date();
 
-  const orientationText = substrate.orientation.map(x => '• ' + x).join('\n');
-  const reflectionText = substrate.reflection.length > 0
-    ? substrate.reflection.map(x => '• ' + x).join('\n')
-    : '';
+  const orientationText = String(substrate.orientation || '');
+  const reflectionText = String(substrate.reflection || '');
 
   const values = [
     ['generated_at', now],
     ['timeframe', 'Today'],
     ['orientation', orientationText],
-    ['attention', substrate.attention],
-    ['context', substrate.context],
-    ['framing', substrate.framing],
+    ['attention', substrate.attention || ''],
+    ['context', substrate.context || ''],
+    ['framing', substrate.framing || ''],
     ['reflection', reflectionText],
     ['constraints', substrate.constraints || ''],
     ['last_run_status', status]
@@ -822,11 +290,11 @@ function _appendSurfaceAArchive(substrate) {
   
   const now = new Date();
   const runId = Utilities.getUuid();
-  const orientationText = Array.isArray(substrate.orientation) ? substrate.orientation.join('\n') : String(substrate.orientation || '');
+  const orientationText = String(substrate.orientation || '');
   const attentionText = String(substrate.attention || '');
   const contextText = String(substrate.context || '');
   const framingText = String(substrate.framing || '');
-  const reflectionText = Array.isArray(substrate.reflection) ? substrate.reflection.join('\n') : String(substrate.reflection || '');
+  const reflectionText = String(substrate.reflection || '');
   const constraintsText = String(substrate.constraints || '');
   
   const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];

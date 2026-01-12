@@ -80,24 +80,14 @@ function _buildUnifiedSurfaceAPrompt(rawNotes) {
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
-GLOBAL OUTPUT RULES (CRITICAL):
+OUTPUT RULES:
 - ${langInstruction}
-- Use ONE language only for all fields. Do not mix languages.
-- Write in complete sentences only.
-- Do NOT use bullet points, lists, dashes, or leading symbols.
-- Do NOT truncate sentences.
-- Prefer fewer complete sentences over many partial ones.
-- If information is insufficient, output an empty string for that field.
-- Never output placeholders, ellipses, or unfinished thoughts.
-- Surface A is descriptive only. No advice, no judgment, no interpretation.
-
-OUTPUT REQUIREMENTS:
-Return ONLY valid JSON.
-All values must be strings.
-Each value must be 0–3 complete sentences.
-Use ONE language only.
-Do not use bullets or lists.
-If unsupported by RAW, return "".
+- Return ONLY valid JSON. No markdown. No code blocks.
+- All values must be strings.
+- Each field may contain 0–2 complete sentences. Prefer 1 sentence when possible.
+- Complete sentences only. No bullets, lists, or leading symbols.
+- If information is insufficient, return "" for that field.
+- Descriptive only. No advice, no judgment, no interpretation.
 
 FIELD DEFINITIONS:
 - orientation: What the day was broadly oriented around, if observable.
@@ -117,7 +107,7 @@ REQUIRED JSON SCHEMA:
   "constraints": ""
 }
 
-Return ONLY the JSON object. No explanation. No markdown. No code blocks.`;
+Return ONLY the JSON object.`;
 }
 
 function _parseSurfaceAJSON(text) {
@@ -220,7 +210,7 @@ function _callGemini(promptText) {
     ],
     generationConfig: {
       temperature: 0.2,
-      maxOutputTokens: 1000
+      maxOutputTokens: 1200
     }
   };
 

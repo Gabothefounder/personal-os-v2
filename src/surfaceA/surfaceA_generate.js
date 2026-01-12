@@ -52,6 +52,8 @@ function runDailySynthesis() {
   }
 
   _writeSurfaceASubstrate(substrate, 'SUCCESS');
+  
+  _appendSurfaceAArchive(substrate);
 
   // Surface B Daily runs automatically after successful Surface A synthesis
   try {
@@ -586,6 +588,28 @@ function _writeSurfaceASubstrate(substrate, status) {
     ['control', 'Continue · Dig deeper · Pause'],
     ['last_run_status', status]
   ]);
+}
+
+// ================== ARCHIVE ==================
+function _appendSurfaceAArchive(substrate) {
+  const sheet = _getOrCreateSheet('SURFACE_A_ARCHIVE');
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length === 0) {
+    const header = ['archived_at', 'run_id', 'orientation', 'attention', 'context', 'framing', 'reflection'];
+    sheet.getRange(1, 1, 1, header.length).setValues([header]);
+  }
+  
+  const now = new Date();
+  const runId = Utilities.getUuid();
+  const orientationText = Array.isArray(substrate.orientation) ? substrate.orientation.join('\n') : String(substrate.orientation || '');
+  const attentionText = String(substrate.attention || '');
+  const contextText = String(substrate.context || '');
+  const framingText = String(substrate.framing || '');
+  const reflectionText = Array.isArray(substrate.reflection) ? substrate.reflection.join('\n') : String(substrate.reflection || '');
+  
+  const row = [now, runId, orientationText, attentionText, contextText, framingText, reflectionText];
+  sheet.appendRow(row);
 }
 
 // ================== HELPERS ==================

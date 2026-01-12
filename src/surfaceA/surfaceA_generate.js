@@ -741,7 +741,7 @@ function _writeSurfaceASubstrate(substrate, status) {
     ? substrate.reflection.map(x => '• ' + x).join('\n')
     : '';
 
-  sheet.getRange(1, 1, 8, 2).setValues([
+  const values = [
     ['generated_at', now],
     ['timeframe', 'Today'],
     ['orientation', orientationText],
@@ -751,7 +751,9 @@ function _writeSurfaceASubstrate(substrate, status) {
     ['reflection', reflectionText],
     ['constraints', substrate.constraints || ''],
     ['last_run_status', status]
-  ]);
+  ];
+
+  sheet.getRange(1, 1, values.length, 2).setValues(values);
 }
 
 // ================== ARCHIVE ==================

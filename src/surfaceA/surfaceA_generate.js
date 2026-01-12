@@ -33,13 +33,49 @@ function runDailySynthesis() {
     return;
   }
 
-  let substrate;
+  const substrate = {
+    orientation: '',
+    attention: '',
+    context: '',
+    framing: '',
+    reflection: '',
+    constraints: ''
+  };
+  
   try {
-    substrate = _generateSurfaceASubstrate(rawNotes);
+    substrate.orientation = _generateOrientation(rawNotes);
   } catch (e) {
-    Logger.log('SURFACE A SYNTHESIS FAILED — Aborting. Previous substrate unchanged.');
-    Logger.log(e.message);
-    return;
+    Logger.log('ORIENTATION generation failed: ' + e.message);
+  }
+  
+  try {
+    substrate.attention = _generateAttention(rawNotes);
+  } catch (e) {
+    Logger.log('ATTENTION generation failed: ' + e.message);
+  }
+  
+  try {
+    substrate.context = _generateContext(rawNotes);
+  } catch (e) {
+    Logger.log('CONTEXT generation failed: ' + e.message);
+  }
+  
+  try {
+    substrate.framing = _generateFraming(rawNotes);
+  } catch (e) {
+    Logger.log('FRAMING generation failed: ' + e.message);
+  }
+  
+  try {
+    substrate.reflection = _generateReflection(rawNotes);
+  } catch (e) {
+    Logger.log('REFLECTION generation failed: ' + e.message);
+  }
+  
+  try {
+    substrate.constraints = _generateConstraints(rawNotes);
+  } catch (e) {
+    Logger.log('CONSTRAINTS generation failed: ' + e.message);
   }
 
   _writeSurfaceASubstrate(substrate, 'SUCCESS');
@@ -57,89 +93,126 @@ function runDailySynthesis() {
   Logger.log('--- DAILY SYNTHESIS END ---');
 }
 
-// ================== SINGLE-PASS SYNTHESIS ==================
-function _generateSurfaceASubstrate(rawNotes) {
-  const prompt = _buildUnifiedSurfaceAPrompt(rawNotes);
-  Logger.log('SURFACE A UNIFIED PROMPT BUILT');
-
+// ================== FIELD GENERATION ==================
+function _generateOrientation(rawNotes) {
+  const prompt = _buildOrientationPrompt(rawNotes);
   const aiText = _callGemini(prompt);
-  Logger.log('=== SURFACE A OUTPUT START ===');
-  Logger.log(aiText);
-  Logger.log('=== SURFACE A OUTPUT END ===');
-
-  const substrate = _parseSurfaceAJSON(aiText);
-  
-  return substrate;
+  return _sanitizeField(aiText);
 }
 
-function _buildUnifiedSurfaceAPrompt(rawNotes) {
-  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
-    ? 'All output must be written in French. Do not switch languages.'
-    : 'All output must be written in English. Do not switch languages.';
+function _generateAttention(rawNotes) {
+  const prompt = _buildAttentionPrompt(rawNotes);
+  const aiText = _callGemini(prompt);
+  return _sanitizeField(aiText);
+}
+
+function _generateContext(rawNotes) {
+  const prompt = _buildContextPrompt(rawNotes);
+  const aiText = _callGemini(prompt);
+  return _sanitizeField(aiText);
+}
+
+function _generateFraming(rawNotes) {
+  const prompt = _buildFramingPrompt(rawNotes);
+  const aiText = _callGemini(prompt);
+  return _sanitizeField(aiText);
+}
+
+function _generateReflection(rawNotes) {
+  const prompt = _buildReflectionPrompt(rawNotes);
+  const aiText = _callGemini(prompt);
+  return _sanitizeField(aiText);
+}
+
+function _generateConstraints(rawNotes) {
+  const prompt = _buildConstraintsPrompt(rawNotes);
+  const aiText = _callGemini(prompt);
+  return _sanitizeField(aiText);
+}
+
+// ================== PROMPTS ==================
+function _buildOrientationPrompt(rawNotes) {
+  const lang = SURFACE_A_LANGUAGE === 'fr' ? 'French' : 'English';
+  const recentNotes = rawNotes.slice(-20).map(n => '- ' + n).join('\n');
   
   return `RAW NOTES:
-${rawNotes.map(n => '- ' + n).join('\n')}
+${recentNotes}
 
-OUTPUT RULES:
-- ${langInstruction}
-- Return ONLY valid JSON. No markdown. No code blocks.
-- All values must be strings.
-- Each field may contain 0–2 complete sentences. Prefer 1 sentence when possible.
-- Complete sentences only. No bullets, lists, or leading symbols.
-- If information is insufficient, return "" for that field.
-- Descriptive only. No advice, no judgment, no interpretation.
-
-FIELD DEFINITIONS:
-- orientation: What the day was broadly oriented around, if observable.
-- attention: Where cognitive or emotional attention was primarily directed.
-- context: Factual situational backdrop (events, people, circumstances).
-- framing: How the day was implicitly experienced or structured.
-- reflection: Notable internal observations explicitly present in RAW.
-- constraints: Observed limitations (time, energy, availability, attention).
-
-REQUIRED JSON SCHEMA:
-{
-  "orientation": "",
-  "attention": "",
-  "context": "",
-  "framing": "",
-  "reflection": "",
-  "constraints": ""
+Write up to 3 sentences describing what the day was broadly oriented around (activities, focus areas).
+Be descriptive only.
+Truncation is acceptable.
+Do not explain. Do not advise.
+Write in ${lang}.`;
 }
 
-Return ONLY the JSON object.`;
+function _buildAttentionPrompt(rawNotes) {
+  const lang = SURFACE_A_LANGUAGE === 'fr' ? 'French' : 'English';
+  const recentNotes = rawNotes.slice(-20).map(n => '- ' + n).join('\n');
+  
+  return `RAW NOTES:
+${recentNotes}
+
+Write up to 3 sentences describing where cognitive or emotional attention was primarily directed.
+Be descriptive only.
+Truncation is acceptable.
+Do not explain. Do not advise.
+Write in ${lang}.`;
 }
 
-function _parseSurfaceAJSON(text) {
-  let jsonText = text.trim();
+function _buildContextPrompt(rawNotes) {
+  const lang = SURFACE_A_LANGUAGE === 'fr' ? 'French' : 'English';
+  const recentNotes = rawNotes.slice(-20).map(n => '- ' + n).join('\n');
   
-  // Remove markdown code blocks if present
-  jsonText = jsonText.replace(/^```json\s*/i, '');
-  jsonText = jsonText.replace(/^```\s*/i, '');
-  jsonText = jsonText.replace(/\s*```$/i, '');
-  jsonText = jsonText.trim();
+  return `RAW NOTES:
+${recentNotes}
+
+Write up to 3 sentences describing factual situational backdrop (events, people, circumstances).
+Be descriptive only.
+Truncation is acceptable.
+Do not explain. Do not advise.
+Write in ${lang}.`;
+}
+
+function _buildFramingPrompt(rawNotes) {
+  const lang = SURFACE_A_LANGUAGE === 'fr' ? 'French' : 'English';
+  const recentNotes = rawNotes.slice(-20).map(n => '- ' + n).join('\n');
   
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch (e) {
-    throw new Error('INVALID JSON — Failed to parse Surface A output: ' + e.message);
-  }
+  return `RAW NOTES:
+${recentNotes}
+
+Write up to 3 sentences describing how the day was implicitly experienced or structured.
+Be descriptive only.
+Truncation is acceptable.
+Do not explain. Do not advise.
+Write in ${lang}.`;
+}
+
+function _buildReflectionPrompt(rawNotes) {
+  const lang = SURFACE_A_LANGUAGE === 'fr' ? 'French' : 'English';
+  const recentNotes = rawNotes.slice(-20).map(n => '- ' + n).join('\n');
   
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('INVALID JSON — Surface A output is not an object');
-  }
+  return `RAW NOTES:
+${recentNotes}
+
+Write up to 3 sentences describing notable internal observations explicitly present in RAW.
+Be descriptive only.
+Truncation is acceptable.
+Do not explain. Do not advise.
+Write in ${lang}.`;
+}
+
+function _buildConstraintsPrompt(rawNotes) {
+  const lang = SURFACE_A_LANGUAGE === 'fr' ? 'French' : 'English';
+  const recentNotes = rawNotes.slice(-20).map(n => '- ' + n).join('\n');
   
-  const substrate = {
-    orientation: _sanitizeField(parsed.orientation),
-    attention: _sanitizeField(parsed.attention),
-    context: _sanitizeField(parsed.context),
-    framing: _sanitizeField(parsed.framing),
-    reflection: _sanitizeField(parsed.reflection),
-    constraints: _sanitizeField(parsed.constraints)
-  };
-  
-  return substrate;
+  return `RAW NOTES:
+${recentNotes}
+
+Write up to 3 sentences describing observed limitations (time, energy, availability, attention).
+Be descriptive only.
+Truncation is acceptable.
+Do not explain. Do not advise.
+Write in ${lang}.`;
 }
 
 function _sanitizeField(value) {
@@ -147,41 +220,7 @@ function _sanitizeField(value) {
     return '';
   }
   
-  let text = String(value).trim();
-  
-  if (text.length === 0) {
-    return '';
-  }
-  
-  // Remove leading bullet symbols
-  text = text.replace(/^[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/g, '');
-  text = text.replace(/^[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/gm, '');
-  
-  // Remove leading/trailing quotation marks
-  text = text.replace(/^["'`«»„‚]/g, '');
-  text = text.replace(/["'`«»„‚]$/g, '');
-  
-  text = text.trim();
-  
-  // If output ends mid-sentence (no punctuation), discard the fragment
-  if (text.length > 0 && !/[.!?]$/.test(text[text.length - 1])) {
-    const lastSentenceEnd = Math.max(
-      text.lastIndexOf('.'),
-      text.lastIndexOf('!'),
-      text.lastIndexOf('?')
-    );
-    if (lastSentenceEnd >= 0) {
-      text = text.substring(0, lastSentenceEnd + 1);
-    } else {
-      return '';
-    }
-  }
-  
-  text = text.trim();
-  
-  if (text.length === 0 || text.length < 3) {
-    return '';
-  }
+  const text = String(value).trim();
   
   return text;
 }

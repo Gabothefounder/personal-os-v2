@@ -15,6 +15,9 @@
 const SURFACEA_GEN_TAB_RAW = 'RAW';
 const SURFACEA_GEN_TAB_SURFACE_A = 'SURFACE_A';
 
+// ================== LANGUAGE LOCK ==================
+const SURFACE_A_LANGUAGE = 'fr'; // or 'en'
+
 // ================== ENTRY POINT ==================
 // NOTE: For scheduled automation, triggers should call runDailyIntelligenceCycle() instead of runDailySynthesis()
 // to ensure DERIVED runs automatically after successful Surface A synthesis.
@@ -133,7 +136,8 @@ function _generateOrientation(rawNotes) {
   Logger.log(aiText);
   Logger.log('=== ORIENTATION OUTPUT END ===');
 
-  return _parseOrientation(aiText);
+  const sanitized = _sanitizeSurfaceAOutput(aiText);
+  return _parseOrientation(sanitized);
 }
 
 function _generateAttention(rawNotes) {
@@ -146,7 +150,8 @@ function _generateAttention(rawNotes) {
     Logger.log(aiText);
     Logger.log('=== ATTENTION OUTPUT END ===');
 
-    return _parseStringField(aiText, 'attention');
+    const sanitized = _sanitizeSurfaceAOutput(aiText);
+    return _parseStringField(sanitized, 'attention');
   } catch (e) {
     return '';
   }
@@ -162,7 +167,8 @@ function _generateContext(rawNotes) {
     Logger.log(aiText);
     Logger.log('=== CONTEXT OUTPUT END ===');
 
-    return _parseStringField(aiText, 'context');
+    const sanitized = _sanitizeSurfaceAOutput(aiText);
+    return _parseStringField(sanitized, 'context');
   } catch (e) {
     return '';
   }
@@ -178,7 +184,8 @@ function _generateFraming(rawNotes) {
     Logger.log(aiText);
     Logger.log('=== FRAMING OUTPUT END ===');
 
-    return _parseStringField(aiText, 'framing');
+    const sanitized = _sanitizeSurfaceAOutput(aiText);
+    return _parseStringField(sanitized, 'framing');
   } catch (e) {
     return '';
   }
@@ -194,7 +201,8 @@ function _generateReflection(rawNotes) {
     Logger.log(aiText);
     Logger.log('=== REFLECTION OUTPUT END ===');
 
-    return _parseReflection(aiText);
+    const sanitized = _sanitizeSurfaceAOutput(aiText);
+    return _parseReflection(sanitized);
   } catch (e) {
     return [];
   }
@@ -210,7 +218,8 @@ function _generateConstraints(rawNotes) {
     Logger.log(aiText);
     Logger.log('=== CONSTRAINTS OUTPUT END ===');
 
-    return _parseStringField(aiText, 'constraints');
+    const sanitized = _sanitizeSurfaceAOutput(aiText);
+    return _parseStringField(sanitized, 'constraints');
   } catch (e) {
     return '';
   }
@@ -251,10 +260,15 @@ function _generateConstraints(rawNotes) {
 //   - Silence is not failure. Omission preferred to abstraction.
 
 function _buildOrientationPrompt(rawNotes) {
+  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
+    ? 'All output must be written in French. Do not switch languages.'
+    : 'All output must be written in English. Do not switch languages.';
+  
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
 GLOBAL OUTPUT RULES (CRITICAL):
+- ${langInstruction}
 - Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
 - Do NOT use bullet points, lists, dashes, or leading symbols.
@@ -285,10 +299,15 @@ No numbering, bullets, or extra text.`;
 }
 
 function _buildAttentionPrompt(rawNotes) {
+  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
+    ? 'All output must be written in French. Do not switch languages.'
+    : 'All output must be written in English. Do not switch languages.';
+  
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
 GLOBAL OUTPUT RULES (CRITICAL):
+- ${langInstruction}
 - Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
 - Do NOT use bullet points, lists, dashes, or leading symbols.
@@ -323,10 +342,15 @@ No extra text.`;
 }
 
 function _buildContextPrompt(rawNotes) {
+  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
+    ? 'All output must be written in French. Do not switch languages.'
+    : 'All output must be written in English. Do not switch languages.';
+  
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
 GLOBAL OUTPUT RULES (CRITICAL):
+- ${langInstruction}
 - Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
 - Do NOT use bullet points, lists, dashes, or leading symbols.
@@ -371,10 +395,15 @@ No extra text.`;
 }
 
 function _buildFramingPrompt(rawNotes) {
+  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
+    ? 'All output must be written in French. Do not switch languages.'
+    : 'All output must be written in English. Do not switch languages.';
+  
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
 GLOBAL OUTPUT RULES (CRITICAL):
+- ${langInstruction}
 - Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
 - Do NOT use bullet points, lists, dashes, or leading symbols.
@@ -418,10 +447,15 @@ No extra text.`;
 }
 
 function _buildReflectionPrompt(rawNotes) {
+  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
+    ? 'All output must be written in French. Do not switch languages.'
+    : 'All output must be written in English. Do not switch languages.';
+  
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
 GLOBAL OUTPUT RULES (CRITICAL):
+- ${langInstruction}
 - Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
 - Do NOT use bullet points, lists, dashes, or leading symbols.
@@ -468,10 +502,15 @@ No extra text.`;
 }
 
 function _buildConstraintsPrompt(rawNotes) {
+  const langInstruction = SURFACE_A_LANGUAGE === 'fr' 
+    ? 'All output must be written in French. Do not switch languages.'
+    : 'All output must be written in English. Do not switch languages.';
+  
   return `RAW NOTES:
 ${rawNotes.map(n => '- ' + n).join('\n')}
 
 GLOBAL OUTPUT RULES (CRITICAL):
+- ${langInstruction}
 - Use ONE language only for all fields. Do not mix languages.
 - Write in complete sentences only.
 - Do NOT use bullet points, lists, dashes, or leading symbols.
@@ -500,6 +539,61 @@ If a complete sentence cannot be produced, return an empty string.
 End each sentence with a period if returning text.
 Stop after the sentences or empty string.
 No extra text.`;
+}
+
+// ================== SANITATION ==================
+function _sanitizeSurfaceAOutput(text) {
+  if (!text || typeof text !== 'string') {
+    return '';
+  }
+  
+  let cleaned = text.trim();
+  
+  if (cleaned.length === 0) {
+    return '';
+  }
+  
+  // Remove leading bullet symbols (•, -, *, and variations)
+  cleaned = cleaned.replace(/^[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/g, '');
+  cleaned = cleaned.replace(/^[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/gm, '');
+  
+  // Remove leading/trailing quotation marks
+  cleaned = cleaned.replace(/^["'`«»„‚]/g, '');
+  cleaned = cleaned.replace(/["'`«»„‚]$/g, '');
+  
+  // Trim whitespace
+  cleaned = cleaned.trim();
+  
+  // Flatten bullet-style line breaks into sentences
+  // Replace line breaks that look like list items with sentence separators
+  cleaned = cleaned.replace(/\n[\s]*[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/g, '. ');
+  cleaned = cleaned.replace(/\n[\s]*[\u2022\u2023\u25E6\u2043\u2219\-\*]\s*/g, '. ');
+  
+  // If output ends mid-sentence (no punctuation), discard the fragment
+  const lastChar = cleaned[cleaned.length - 1];
+  if (cleaned.length > 0 && !/[.!?]$/.test(lastChar)) {
+    // Find last complete sentence
+    const lastSentenceEnd = Math.max(
+      cleaned.lastIndexOf('.'),
+      cleaned.lastIndexOf('!'),
+      cleaned.lastIndexOf('?')
+    );
+    if (lastSentenceEnd >= 0) {
+      cleaned = cleaned.substring(0, lastSentenceEnd + 1);
+    } else {
+      // No complete sentences found, discard
+      return '';
+    }
+  }
+  
+  cleaned = cleaned.trim();
+  
+  // If sanitation results in empty or unsafe text, return empty string
+  if (cleaned.length === 0 || cleaned.length < 3) {
+    return '';
+  }
+  
+  return cleaned;
 }
 
 // ================== PARSERS ==================

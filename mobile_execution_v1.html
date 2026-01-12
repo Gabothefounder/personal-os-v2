@@ -106,6 +106,98 @@
       border-width: 2px;
     }
 
+    .task-actions button.set-time,
+    .task-actions button.set-recurrence {
+      background: #666;
+      color: #ffffff;
+      font-size: 0.9rem !important;
+      min-height: 60px !important;
+      height: 60px !important;
+      padding: 16px 20px !important;
+    }
+
+    .task-actions button.set-time:active,
+    .task-actions button.set-recurrence:active {
+      background: #555;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 90%;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-content h3 {
+      font-size: 1.1rem !important;
+      margin-bottom: 20px;
+      color: #1a1a1a;
+    }
+
+    .modal-content label {
+      display: block;
+      font-size: 1rem !important;
+      margin-bottom: 8px;
+      color: #1a1a1a;
+    }
+
+    .modal-content input,
+    .modal-content select {
+      width: 100%;
+      font-size: 1rem !important;
+      padding: 16px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .modal-actions button {
+      flex: 1;
+      min-height: 90px !important;
+      height: 90px !important;
+      font-size: 1rem !important;
+      padding: 28px 24px !important;
+      border: none;
+      border-radius: 16px !important;
+      cursor: pointer;
+    }
+
+    .modal-actions button.primary {
+      background: #3a3a3a;
+      color: #ffffff;
+    }
+
+    .modal-actions button.secondary {
+      background: #666;
+      color: #ffffff;
+    }
+
     .task-actions {
       display: flex;
       gap: 12px;
@@ -209,11 +301,51 @@
   </div>
   <div id="toast" class="toast"></div>
 
+  <div id="time-modal" class="modal">
+    <div class="modal-content">
+      <h3>Set Time</h3>
+      <label for="time-due-at">Due at</label>
+      <input type="datetime-local" id="time-due-at">
+      <label for="time-reminder">Reminder</label>
+      <select id="time-reminder">
+        <option value="none">none</option>
+        <option value="at_due">at_due</option>
+        <option value="minutes_before:15">minutes_before:15</option>
+        <option value="hours_before:1">hours_before:1</option>
+        <option value="day_of:09:00">day_of:09:00</option>
+      </select>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeTimeModal()">Cancel</button>
+        <button class="primary" onclick="saveTime()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="recurrence-modal" class="modal">
+    <div class="modal-content">
+      <h3>Set Recurrence</h3>
+      <label for="recurrence-rule">Recurrence</label>
+      <select id="recurrence-rule">
+        <option value="">none</option>
+        <option value="daily">daily</option>
+        <option value="weekly:0">weekly:sunday</option>
+        <option value="weekly:1">weekly:monday</option>
+        <option value="weekly:5">weekly:friday</option>
+        <option value="monthly:1">monthly:1</option>
+      </select>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeRecurrenceModal()">Cancel</button>
+        <button class="primary" onclick="saveRecurrence()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzDnoBDowi3U_H3olPqPuLtO-bJaLoYrsjp4ZONdO9_6zim1ajZfQzYigDiY-EYTTba/exec";
 
     const taskList = document.getElementById('task-list');
     const toast = document.getElementById('toast');
+    let currentTaskId = null;
 
     function goToCapture() {
       window.top.location.href = "https://script.google.com/macros/s/AKfycbzDnoBDowi3U_H3olPqPuLtO-bJaLoYrsjp4ZONdO9_6zim1ajZfQzYigDiY-EYTTba/exec";
@@ -267,6 +399,8 @@
               <div class="task-content">${escapeHtml(task.content || '')}</div>
               <div class="task-meta">${escapeHtml(dueStr)}</div>
               <div class="task-actions">
+                <button class="set-time" onclick="openTimeModal('${task.task_id}')">Set time</button>
+                <button class="set-recurrence" onclick="openRecurrenceModal('${task.task_id}')">Set recurrence</button>
                 <button class="done" onclick="completeTask('${task.task_id}')">Done</button>
                 <button class="cancel" onclick="cancelTask('${task.task_id}')">Cancel</button>
               </div>
@@ -283,6 +417,8 @@
           <div class="task-item" data-task-id="${task.task_id}">
             <div class="task-content">${escapeHtml(task.content || '')}</div>
             <div class="task-actions">
+              <button class="set-time" onclick="openTimeModal('${task.task_id}')">Set time</button>
+              <button class="set-recurrence" onclick="openRecurrenceModal('${task.task_id}')">Set recurrence</button>
               <button class="done" onclick="completeTask('${task.task_id}')">Done</button>
               <button class="cancel" onclick="cancelTask('${task.task_id}')">Cancel</button>
             </div>
@@ -313,6 +449,72 @@
       try {
         await callApi("cancel_task", { task_id: taskId });
         showToast("Task canceled");
+        await loadTasks();
+      } catch (error) {
+        showToast("Error: " + error.message);
+      }
+    }
+
+    function openTimeModal(taskId) {
+      currentTaskId = taskId;
+      document.getElementById('time-modal').classList.add('show');
+      document.getElementById('time-due-at').value = '';
+      document.getElementById('time-reminder').value = 'none';
+    }
+
+    function closeTimeModal() {
+      document.getElementById('time-modal').classList.remove('show');
+      currentTaskId = null;
+    }
+
+    async function saveTime() {
+      if (!currentTaskId) return;
+
+      const dueAt = document.getElementById('time-due-at').value;
+      const reminderRule = document.getElementById('time-reminder').value;
+
+      if (!dueAt) {
+        showToast("Due time required");
+        return;
+      }
+
+      try {
+        await callApi("set_task_timing", {
+          task_id: currentTaskId,
+          due_at: dueAt,
+          reminder_rule: reminderRule
+        });
+        showToast("Time set");
+        closeTimeModal();
+        await loadTasks();
+      } catch (error) {
+        showToast("Error: " + error.message);
+      }
+    }
+
+    function openRecurrenceModal(taskId) {
+      currentTaskId = taskId;
+      document.getElementById('recurrence-modal').classList.add('show');
+      document.getElementById('recurrence-rule').value = '';
+    }
+
+    function closeRecurrenceModal() {
+      document.getElementById('recurrence-modal').classList.remove('show');
+      currentTaskId = null;
+    }
+
+    async function saveRecurrence() {
+      if (!currentTaskId) return;
+
+      const recurrenceRule = document.getElementById('recurrence-rule').value;
+
+      try {
+        await callApi("set_task_recurrence", {
+          task_id: currentTaskId,
+          recurrence_rule: recurrenceRule || 'none'
+        });
+        showToast("Recurrence set");
+        closeRecurrenceModal();
         await loadTasks();
       } catch (error) {
         showToast("Error: " + error.message);

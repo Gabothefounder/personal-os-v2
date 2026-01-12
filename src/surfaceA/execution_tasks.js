@@ -30,6 +30,9 @@
 const EXECUTION_TAB_INBOX = 'EXECUTION_INBOX';
 const EXECUTION_TAB_TASKS = 'EXECUTION_TASKS';
 
+// ================== REMINDER CONFIG ==================
+const EXECUTION_REMINDER_EMAIL = 'gestionrockwell@gmail.com';
+
 // ================== STATUS VALUES ==================
 const STATUS_OPEN = 'open';
 const STATUS_DONE = 'done';
@@ -692,13 +695,18 @@ function runExecutionRemindersOnce() {
       continue;
     }
 
+    const contentIdx = headerRow.indexOf('content');
+    const content = contentIdx >= 0 ? String(row[contentIdx] || '') : '';
+    const dueAtDate = new Date(dueAt);
+    const dueAtFormatted = dueAtDate.toLocaleString();
+    const isOverdue = now > dueAtDate;
+    const status = isOverdue ? 'overdue' : 'upcoming';
+
     try {
-      const taskId = row[idIdx];
-      const content = headerRow.indexOf('content') >= 0 ? row[headerRow.indexOf('content')] : '';
       MailApp.sendEmail({
-        to: Session.getActiveUser().getEmail(),
-        subject: 'Reminder: ' + String(content).substring(0, 50),
-        body: 'Task: ' + String(content) + '\nDue: ' + dueAt.toString()
+        to: EXECUTION_REMINDER_EMAIL,
+        subject: 'Execution reminder',
+        body: 'Task: ' + content + '\nDue: ' + dueAtFormatted + '\nStatus: ' + status
       });
     } catch (e) {
       // Silent failure

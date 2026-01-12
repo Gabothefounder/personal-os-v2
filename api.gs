@@ -134,6 +134,30 @@ function doGet(e) {
         
         return jsonResponse({ ok: true, promoted_count: promotedCount });
 
+      case "set_task_timing":
+        if (!payload.task_id) {
+          return jsonResponse({ ok: false, error: "Missing task_id" });
+        }
+        setTaskTiming(payload.task_id, {
+          due_at: payload.due_at,
+          due_window: payload.due_window,
+          reminder_rule: payload.reminder_rule
+        });
+        return jsonResponse({ ok: true });
+
+      case "set_task_recurrence":
+        if (!payload.task_id) {
+          return jsonResponse({ ok: false, error: "Missing task_id" });
+        }
+        setTaskRecurrence(payload.task_id, {
+          recurrence_rule: payload.recurrence_rule,
+          recurrence_anchor: payload.recurrence_anchor
+        });
+        return jsonResponse({ ok: true });
+
+      case "list_commitments":
+        return jsonResponse(listCommitments());
+
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + action });
     }

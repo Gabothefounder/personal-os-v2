@@ -95,6 +95,17 @@
       margin-bottom: 16px;
     }
 
+    .task-meta {
+      font-size: 0.9rem !important;
+      color: #666;
+      margin-bottom: 12px;
+    }
+
+    .task-item.overdue {
+      border-color: #dc2626;
+      border-width: 2px;
+    }
+
     .task-actions {
       display: flex;
       gap: 12px;
@@ -240,21 +251,44 @@
     }
 
     function renderTasks(tasks) {
-      if (tasks.length === 0) {
-        taskList.innerHTML = '<div class="section-header">COMMITMENTS</div><div class="empty-state" style="padding: 20px;">No commitments</div><div class="section-header">ACTIONS</div><div class="empty-state" style="padding: 20px;">No actions</div>';
-        return;
+      const commitments = tasks.filter(t => t.due_at);
+      const actions = tasks.filter(t => !t.due_at);
+
+      let commitmentsHtml = '<div class="section-header">COMMITMENTS</div>';
+      if (commitments.length === 0) {
+        commitmentsHtml += '<div class="empty-state" style="padding: 20px;">No commitments</div>';
+      } else {
+        commitmentsHtml += commitments.map(task => {
+          const dueDate = new Date(task.due_at);
+          const dueStr = dueDate.toLocaleString();
+          const overdueClass = task.overdue ? ' overdue' : '';
+          return `
+            <div class="task-item${overdueClass}" data-task-id="${task.task_id}">
+              <div class="task-content">${escapeHtml(task.content || '')}</div>
+              <div class="task-meta">${escapeHtml(dueStr)}</div>
+              <div class="task-actions">
+                <button class="done" onclick="completeTask('${task.task_id}')">Done</button>
+                <button class="cancel" onclick="cancelTask('${task.task_id}')">Cancel</button>
+              </div>
+            </div>
+          `;
+        }).join('');
       }
 
-      const commitmentsHtml = '<div class="section-header">COMMITMENTS</div><div class="empty-state" style="padding: 20px;">No commitments</div>';
-      const actionsHtml = '<div class="section-header">ACTIONS</div>' + tasks.map(task => `
-        <div class="task-item" data-task-id="${task.task_id}">
-          <div class="task-content">${escapeHtml(task.content || '')}</div>
-          <div class="task-actions">
-            <button class="done" onclick="completeTask('${task.task_id}')">Done</button>
-            <button class="cancel" onclick="cancelTask('${task.task_id}')">Cancel</button>
+      let actionsHtml = '<div class="section-header">ACTIONS</div>';
+      if (actions.length === 0) {
+        actionsHtml += '<div class="empty-state" style="padding: 20px;">No actions</div>';
+      } else {
+        actionsHtml += actions.map(task => `
+          <div class="task-item" data-task-id="${task.task_id}">
+            <div class="task-content">${escapeHtml(task.content || '')}</div>
+            <div class="task-actions">
+              <button class="done" onclick="completeTask('${task.task_id}')">Done</button>
+              <button class="cancel" onclick="cancelTask('${task.task_id}')">Cancel</button>
+            </div>
           </div>
-        </div>
-      `).join('');
+        `).join('');
+      }
 
       taskList.innerHTML = commitmentsHtml + actionsHtml;
     }

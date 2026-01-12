@@ -292,6 +292,22 @@ function createTask(input) {
   const state = STATUS_OPEN;
   const origin = input.origin || (input.inbox_id ? 'inbox' : 'manual');
 
+  const headerRowCreate = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const dueAtIdx = headerRowCreate.indexOf('due_at');
+  const dueWindowIdx = headerRowCreate.indexOf('due_window');
+  const reminderRuleIdx = headerRowCreate.indexOf('reminder_rule');
+  const recurrenceRuleIdx = headerRowCreate.indexOf('recurrence_rule');
+  const recurrenceAnchorIdx = headerRowCreate.indexOf('recurrence_anchor');
+  
+  let dueAt = '';
+  if (input.due_at) {
+    if (input.due_at instanceof Date) {
+      dueAt = input.due_at;
+    } else {
+      dueAt = new Date(input.due_at);
+    }
+  }
+
   // Build row with v1.0 schema
   const row = [
     taskId, // task_id
@@ -312,6 +328,47 @@ function createTask(input) {
     input.due_date || '', // due_date (deprecated but preserved)
     input.decided_id ? String(input.decided_id).trim() : '' // decided_id (legacy, maps to project_id if Project)
   ];
+  
+  if (dueAtIdx >= 0) {
+    while (row.length <= dueAtIdx) {
+      row.push('');
+    }
+    row[dueAtIdx] = dueAt;
+  }
+  
+  if (dueWindowIdx >= 0 && input.due_window) {
+    while (row.length <= dueWindowIdx) {
+      row.push('');
+    }
+    row[dueWindowIdx] = String(input.due_window).trim();
+  }
+  
+  if (reminderRuleIdx >= 0 && input.reminder_rule) {
+    while (row.length <= reminderRuleIdx) {
+      row.push('');
+    }
+    row[reminderRuleIdx] = String(input.reminder_rule).trim();
+  }
+  
+  if (recurrenceRuleIdx >= 0 && input.recurrence_rule) {
+    while (row.length <= recurrenceRuleIdx) {
+      row.push('');
+    }
+    row[recurrenceRuleIdx] = String(input.recurrence_rule).trim();
+  }
+  
+  if (recurrenceAnchorIdx >= 0 && input.recurrence_anchor) {
+    while (row.length <= recurrenceAnchorIdx) {
+      row.push('');
+    }
+    let anchor = '';
+    if (input.recurrence_anchor instanceof Date) {
+      anchor = input.recurrence_anchor;
+    } else {
+      anchor = new Date(input.recurrence_anchor);
+    }
+    row[recurrenceAnchorIdx] = anchor;
+  }
 
   sheet.appendRow(row);
   return taskId;
@@ -408,7 +465,268 @@ function cancelTask(task_id) {
     sheet.getRange(rowIdx, statusIdx + 1).setValue(STATUS_CANCELED);
   }
 
+  // Handle recurrence on completion
+  const headerRowRecur = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const recurrenceRuleIdx = headerRowRecur.indexOf('recurrence_rule');
+  const recurrenceAnchorIdx = headerRowRecur.indexOf('recurrence_anchor');
+  const dueAtIdx = headerRowRecur.indexOf('due_at');
+  const reminderRuleIdx = headerRowRecur.indexOf('reminder_rule');
+  const projectIdIdx = headerRowRecur.indexOf('project_id');
+  const contentIdx = headerRowRecur.indexOf('content');
+  
+  if (recurrenceRuleIdx >= 0) {
+    const recurrenceRule = String(data[rowIdx - 1][recurrenceRuleIdx] || '').trim();
+    if (recurrenceRule && recurrenceRule !== 'none') {
+      const currentDueAt = dueAtIdx >= 0 ? data[rowIdx - 1][dueAtIdx] : null;
+      const anchor = recurrenceAnchorIdx >= 0 ? data[rowIdx - 1][recurrenceAnchorIdx] : null;
+      const baseDate = currentDueAt || anchor || new Date();
+      
+      let nextDueAt = null;
+      if (recurrenceRule === 'daily') {
+        nextDueAt = new Date(baseDate);
+        nextDueAt.setDate(nextDueAt.getDate() + 1);
+      } else if (recurrenceRule.startsWith('weekly:')) {
+        const weekday = parseInt(recurrenceRule.split(':')[1]);
+        nextDueAt = new Date(baseDate);
+        const daysUntil = (weekday - nextDueAt.getDay() + 7) % 7 || 7;
+        nextDueAt.setDate(nextDueAt.getDate() + daysUntil);
+      } else if (recurrenceRule.startsWith('monthly:')) {
+        const day = parseInt(recurrenceRule.split(':')[1]);
+        nextDueAt = new Date(baseDate);
+        nextDueAt.setMonth(nextDueAt.getMonth() + 1);
+        nextDueAt.setDate(day);
+      }
+      
+      if (nextDueAt) {
+        const taskContent = contentIdx >= 0 ? data[rowIdx - 1][contentIdx] : '';
+        const taskProjectId = projectIdIdx >= 0 ? (data[rowIdx - 1][projectIdIdx] ? String(data[rowIdx - 1][projectIdIdx]).trim() : '') : '';
+        const taskReminderRule = reminderRuleIdx >= 0 ? (data[rowIdx - 1][reminderRuleIdx] ? String(data[rowIdx - 1][reminderRuleIdx]).trim() : '') : '';
+        
+        createTask({
+          content: taskContent,
+          project_id: taskProjectId,
+          due_at: nextDueAt,
+          reminder_rule: taskReminderRule,
+          recurrence_rule: recurrenceRule,
+          recurrence_anchor: anchor || nextDueAt
+        });
+      }
+    }
+  }
+
   return true;
+}
+
+function setTaskTiming(task_id, options) {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    throw new Error('No tasks found');
+  }
+
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('task_id');
+  const dueAtIdx = headerRow.indexOf('due_at');
+  const dueWindowIdx = headerRow.indexOf('due_window');
+  const reminderRuleIdx = headerRow.indexOf('reminder_rule');
+
+  if (idIdx === -1) {
+    throw new Error('Invalid EXECUTION_TASKS sheet structure');
+  }
+
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx] || '').trim() === String(task_id).trim()) {
+      rowIdx = i + 1;
+      break;
+    }
+  }
+
+  if (rowIdx === -1) {
+    throw new Error('Task not found: ' + task_id);
+  }
+
+  if (options.due_at !== undefined && dueAtIdx >= 0) {
+    let dueAt = '';
+    if (options.due_at) {
+      if (options.due_at instanceof Date) {
+        dueAt = options.due_at;
+      } else {
+        dueAt = new Date(options.due_at);
+      }
+    }
+    sheet.getRange(rowIdx, dueAtIdx + 1).setValue(dueAt);
+  }
+
+  if (options.due_window !== undefined && dueWindowIdx >= 0) {
+    sheet.getRange(rowIdx, dueWindowIdx + 1).setValue(String(options.due_window || '').trim());
+  }
+
+  if (options.reminder_rule !== undefined && reminderRuleIdx >= 0) {
+    sheet.getRange(rowIdx, reminderRuleIdx + 1).setValue(String(options.reminder_rule || '').trim());
+  }
+
+  return true;
+}
+
+function setTaskRecurrence(task_id, options) {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    throw new Error('No tasks found');
+  }
+
+  const headerRowRecurrence = data[0];
+  const idIdx = headerRowRecurrence.indexOf('task_id');
+  const recurrenceRuleIdx = headerRowRecurrence.indexOf('recurrence_rule');
+  const recurrenceAnchorIdx = headerRowRecurrence.indexOf('recurrence_anchor');
+
+  if (idIdx === -1) {
+    throw new Error('Invalid EXECUTION_TASKS sheet structure');
+  }
+
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx] || '').trim() === String(task_id).trim()) {
+      rowIdx = i + 1;
+      break;
+    }
+  }
+
+  if (rowIdx === -1) {
+    throw new Error('Task not found: ' + task_id);
+  }
+
+  if (options.recurrence_rule !== undefined && recurrenceRuleIdx >= 0) {
+    sheet.getRange(rowIdx, recurrenceRuleIdx + 1).setValue(String(options.recurrence_rule || '').trim());
+  }
+
+  if (options.recurrence_anchor !== undefined && recurrenceAnchorIdx >= 0) {
+    let anchor = '';
+    if (options.recurrence_anchor) {
+      if (options.recurrence_anchor instanceof Date) {
+        anchor = options.recurrence_anchor;
+      } else {
+        anchor = new Date(options.recurrence_anchor);
+      }
+    }
+    sheet.getRange(rowIdx, recurrenceAnchorIdx + 1).setValue(anchor);
+  }
+
+  return true;
+}
+
+function runExecutionRemindersOnce() {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) {
+    return;
+  }
+
+  const headerRow = data[0];
+  const idIdx = headerRow.indexOf('task_id');
+  const stateIdx = headerRow.indexOf('state');
+  const dueAtIdx = headerRow.indexOf('due_at');
+  const reminderRuleIdx = headerRow.indexOf('reminder_rule');
+  const lastRemindedIdx = headerRow.indexOf('last_reminded_at');
+
+  if (idIdx === -1 || stateIdx === -1) {
+    return;
+  }
+
+  const now = new Date();
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const state = String(row[stateIdx] || '').trim();
+    
+    if (state !== STATUS_OPEN) {
+      continue;
+    }
+
+    const dueAt = dueAtIdx >= 0 ? row[dueAtIdx] : null;
+    if (!dueAt) {
+      continue;
+    }
+
+    const reminderRule = reminderRuleIdx >= 0 ? String(row[reminderRuleIdx] || '').trim() : '';
+    if (!reminderRule || reminderRule === 'none') {
+      continue;
+    }
+
+    const lastReminded = lastRemindedIdx >= 0 ? row[lastRemindedIdx] : null;
+    
+    let reminderTime = null;
+    if (reminderRule === 'at_due') {
+      reminderTime = new Date(dueAt);
+    } else if (reminderRule.startsWith('minutes_before:')) {
+      const minutes = parseInt(reminderRule.split(':')[1]);
+      reminderTime = new Date(dueAt);
+      reminderTime.setMinutes(reminderTime.getMinutes() - minutes);
+    } else if (reminderRule.startsWith('hours_before:')) {
+      const hours = parseInt(reminderRule.split(':')[1]);
+      reminderTime = new Date(dueAt);
+      reminderTime.setHours(reminderTime.getHours() - hours);
+    } else if (reminderRule.startsWith('day_of:')) {
+      const timeStr = reminderRule.split(':')[1] + ':' + reminderRule.split(':')[2];
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      reminderTime = new Date(dueAt);
+      reminderTime.setHours(hours);
+      reminderTime.setMinutes(minutes);
+      reminderTime.setSeconds(0);
+      reminderTime.setMilliseconds(0);
+    }
+
+    if (!reminderTime) {
+      continue;
+    }
+
+    if (now < reminderTime) {
+      continue;
+    }
+
+    if (lastReminded && new Date(lastReminded) >= reminderTime) {
+      continue;
+    }
+
+    try {
+      const taskId = row[idIdx];
+      const content = headerRow.indexOf('content') >= 0 ? row[headerRow.indexOf('content')] : '';
+      MailApp.sendEmail({
+        to: Session.getActiveUser().getEmail(),
+        subject: 'Reminder: ' + String(content).substring(0, 50),
+        body: 'Task: ' + String(content) + '\nDue: ' + dueAt.toString()
+      });
+    } catch (e) {
+      // Silent failure
+    }
+
+    if (lastRemindedIdx >= 0) {
+      sheet.getRange(i + 1, lastRemindedIdx + 1).setValue(now);
+    }
+  }
+}
+
+function ensureExecutionReminderTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  let hasReminderTrigger = false;
+  
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'runExecutionRemindersOnce') {
+      hasReminderTrigger = true;
+      break;
+    }
+  }
+  
+  if (!hasReminderTrigger) {
+    ScriptApp.newTrigger('runExecutionRemindersOnce')
+      .timeBased()
+      .everyMinutes(15)
+      .create();
+  }
 }
 
 // ================== QUERY FUNCTIONS ==================
@@ -436,6 +754,7 @@ function listOpenTasks() {
   const writeToRawIdx = headerRow.indexOf('write_to_raw');
   const notesIdx = headerRow.indexOf('notes');
   const decidedIdIdx = headerRow.indexOf('decided_id'); // Legacy
+  const dueAtIdx = headerRow.indexOf('due_at');
 
   if (idIdx === -1 || (stateIdx === -1 && statusIdx === -1)) {
     return [];
@@ -457,6 +776,9 @@ function listOpenTasks() {
 
     const content = contentIdx >= 0 ? row[contentIdx] : 
                     (titleIdx >= 0 ? row[titleIdx] : '');
+    
+    const dueAt = dueAtIdx >= 0 ? row[dueAtIdx] : null;
+    const overdue = dueAt ? (new Date() > new Date(dueAt)) : false;
 
     tasks.push({
       task_id: row[idIdx],
@@ -473,11 +795,18 @@ function listOpenTasks() {
       completion_note: completionNoteIdx >= 0 ? (row[completionNoteIdx] ? String(row[completionNoteIdx]).trim() : '') : '',
       write_to_raw: writeToRawIdx >= 0 ? (row[writeToRawIdx] === true || row[writeToRawIdx] === 'true') : false,
       notes: notesIdx >= 0 ? (row[notesIdx] ? String(row[notesIdx]).trim() : '') : '',
-      decided_id: decidedIdIdx >= 0 ? (row[decidedIdIdx] ? String(row[decidedIdIdx]).trim() : '') : '' // Legacy
+      decided_id: decidedIdIdx >= 0 ? (row[decidedIdIdx] ? String(row[decidedIdIdx]).trim() : '') : '', // Legacy
+      due_at: dueAt,
+      overdue: overdue
     });
   }
 
   return tasks;
+}
+
+function listCommitments() {
+  const tasks = listOpenTasks();
+  return tasks.filter(task => task.due_at !== null && task.due_at !== '');
 }
 
 function listTasksByDecided(decided_id) {
@@ -569,6 +898,63 @@ function runExecutionSelfTest() {
 }
 
 // ================== SCHEMA NORMALIZATION ==================
+function normalizeExecutionTasksSchema_v1_2() {
+  const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length === 0) {
+    _initExecutionSheet();
+    return;
+  }
+  
+  const headerRow = data[0];
+  const newColumns = [
+    'due_at',
+    'due_window',
+    'reminder_rule',
+    'last_reminded_at',
+    'recurrence_rule',
+    'recurrence_anchor'
+  ];
+  
+  const existingHeaders = headerRow.map(h => String(h || '').trim());
+  const missingColumns = [];
+  
+  for (let i = 0; i < newColumns.length; i++) {
+    if (existingHeaders.indexOf(newColumns[i]) === -1) {
+      missingColumns.push(newColumns[i]);
+    }
+  }
+  
+  if (missingColumns.length === 0) {
+    return;
+  }
+  
+  const numRows = data.length;
+  const numCols = headerRow.length + missingColumns.length;
+  
+  const newHeaderRow = headerRow.slice();
+  for (let i = 0; i < missingColumns.length; i++) {
+    newHeaderRow.push(missingColumns[i]);
+  }
+  
+  const newData = [newHeaderRow];
+  
+  for (let rowIdx = 1; rowIdx < numRows; rowIdx++) {
+    const oldRow = data[rowIdx];
+    const newRow = oldRow.slice();
+    for (let i = 0; i < missingColumns.length; i++) {
+      newRow.push('');
+    }
+    newData.push(newRow);
+  }
+  
+  sheet.clear();
+  if (newData.length > 0) {
+    sheet.getRange(1, 1, newData.length, newData[0].length).setValues(newData);
+  }
+}
+
 function normalizeExecutionTasksSchema() {
   const sheet = _getOrCreateSheet(EXECUTION_TAB_TASKS);
   const data = sheet.getDataRange().getValues();

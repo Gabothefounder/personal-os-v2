@@ -152,114 +152,386 @@ function _extractWindowDays(windowStr) {
 // ================== COMPOSE BRIEF ==================
 function _composeWeeklyBrief(eligibleSignals, decidedItems) {
   const lines = [];
-
-  // I. Week in Review
-  lines.push('I. Week in Review');
+  
+  const surfaceA = _readWeeklySurfaceA();
+  const executionData = _readExecutionData();
+  const projects = _readProjectsFromDecided();
+  const allDerivedSignals = _readDerivedSignals() || [];
+  
+  // Operating Reality
+  lines.push('Operating Reality');
   lines.push('');
-  if (eligibleSignals.length > 0 || decidedItems.length > 0) {
-    const signalCount = eligibleSignals.length;
-    const commitmentCount = decidedItems.length;
-    lines.push('DERIVED identified ' + signalCount + ' sustained signal' + (signalCount !== 1 ? 's' : '') + '. DECIDED contains ' + commitmentCount + ' confirmed commitment' + (commitmentCount !== 1 ? 's' : '') + '.');
+  if (surfaceA && (surfaceA.orientation || surfaceA.framing)) {
+    const realityParts = [];
+    if (surfaceA.orientation) {
+      realityParts.push(surfaceA.orientation);
+    }
+    if (surfaceA.framing) {
+      realityParts.push(surfaceA.framing);
+    }
+    lines.push(realityParts.join(' '));
   } else {
-    lines.push('No sustained signals or confirmed commitments recorded.');
+    lines.push('No operational orientation recorded.');
   }
   lines.push('');
   lines.push('');
-
-  // II. Sustained Signals (DERIVED)
-  lines.push('II. Sustained Signals (DERIVED)');
+  
+  // Pressure & Load
+  lines.push('Pressure & Load');
   lines.push('');
-  if (eligibleSignals.length > 0) {
-    for (const signal of eligibleSignals) {
+  const pressureParts = [];
+  if (executionData.openCount > 0) {
+    pressureParts.push(executionData.openCount + ' open task' + (executionData.openCount !== 1 ? 's' : ''));
+  }
+  if (executionData.agingCount > 0) {
+    pressureParts.push(executionData.agingCount + ' aging task' + (executionData.agingCount !== 1 ? 's' : ''));
+  }
+  if (surfaceA && surfaceA.attention) {
+    pressureParts.push('Attention cues: ' + surfaceA.attention);
+  }
+  if (pressureParts.length > 0) {
+    lines.push(pressureParts.join('. ') + '.');
+  } else {
+    lines.push('No pressure indicators recorded.');
+  }
+  lines.push('');
+  lines.push('');
+  
+  // Movement & Friction
+  lines.push('Movement & Friction');
+  lines.push('');
+  const movementParts = [];
+  if (executionData.completedCount > 0) {
+    movementParts.push(executionData.completedCount + ' task' + (executionData.completedCount !== 1 ? 's' : '') + ' completed');
+  }
+  if (executionData.carriedCount > 0) {
+    movementParts.push(executionData.carriedCount + ' task' + (executionData.carriedCount !== 1 ? 's' : '') + ' carried forward');
+  }
+  if (movementParts.length > 0) {
+    lines.push('Movement: ' + movementParts.join('. ') + '.');
+  } else {
+    lines.push('No movement recorded.');
+  }
+  if (executionData.carriedCount > 0) {
+    lines.push('Friction: ' + executionData.carriedCount + ' task' + (executionData.carriedCount !== 1 ? 's' : '') + ' stalled or repeated.');
+  } else {
+    lines.push('Friction: none recorded.');
+  }
+  lines.push('');
+  lines.push('');
+  
+  // Leverage & Dependencies
+  lines.push('Leverage & Dependencies');
+  lines.push('');
+  const projectTasks = executionData.projectLinkedTasks || 0;
+  if (projects.length > 0 || projectTasks > 0) {
+    const leverageParts = [];
+    if (projects.length > 0) {
+      leverageParts.push(projects.length + ' active project' + (projects.length !== 1 ? 's' : ''));
+    }
+    if (projectTasks > 0) {
+      leverageParts.push(projectTasks + ' project-linked task' + (projectTasks !== 1 ? 's' : ''));
+    }
+    lines.push('Leverage: ' + leverageParts.join('. ') + '.');
+  } else {
+    lines.push('Leverage: none recorded.');
+  }
+  lines.push('');
+  lines.push('');
+  
+  // Signals (DERIVED)
+  lines.push('Signals (DERIVED)');
+  lines.push('');
+  
+  const sustained = eligibleSignals || [];
+  const emerging = _getEmergingSignals(allDerivedSignals, eligibleSignals);
+  const collapsed = _getCollapsedSignals(allDerivedSignals, eligibleSignals);
+  
+  lines.push('A. Sustained');
+  if (sustained.length > 0) {
+    for (const signal of sustained) {
       const windowDays = _extractWindowDays(signal.window);
       const ratio = signal.possible > 0 ? (signal.count / signal.possible * 100).toFixed(0) : 0;
-      lines.push('DERIVED detected sustained recurrence: ' + signal.pattern_key + '.');
-      lines.push('Occurred ' + signal.count + ' of ' + signal.possible + ' possible times (' + ratio + '%) over ' + windowDays + ' days.');
-      if (signal.field) {
-        lines.push('Field: ' + signal.field + '.');
-      }
-      lines.push('');
+      lines.push(signal.pattern_key + ': ' + signal.count + '/' + signal.possible + ' (' + ratio + '%) over ' + windowDays + ' days.');
     }
   } else {
-    lines.push('DERIVED detected no sustained signals meeting eligibility threshold.');
-    lines.push('');
+    lines.push('None.');
   }
   lines.push('');
-
-  // III. Signals That Did Not Hold
-  lines.push('III. Signals That Did Not Hold');
-  lines.push('');
-  lines.push('Absence is data. No signals failed to persist this week.');
-  lines.push('');
-  lines.push('');
-
-  // IV. Tensions in View
-  lines.push('IV. Tensions in View');
-  lines.push('');
-  lines.push('No concurrent forces identified.');
-  lines.push('');
-  lines.push('');
-
-  // V. System State
-  lines.push('V. System State');
-  lines.push('');
-  const stateParts = [];
-  if (eligibleSignals.length > 0) {
-    stateParts.push(eligibleSignals.length + ' sustained signal' + (eligibleSignals.length !== 1 ? 's' : '') + ' from DERIVED');
-  }
-  if (decidedItems.length > 0) {
-    stateParts.push(decidedItems.length + ' confirmed commitment' + (decidedItems.length !== 1 ? 's' : '') + ' in DECIDED');
-  }
-  if (stateParts.length > 0) {
-    lines.push('Configuration snapshot: ' + stateParts.join('. ') + '.');
-  } else {
-    lines.push('Configuration snapshot: no sustained signals or confirmed commitments.');
-  }
-  lines.push('');
-  lines.push('');
-
-  // VI. Visible Paths (Not Decisions)
-  lines.push('VI. Visible Paths (Not Decisions)');
-  lines.push('');
-  if (eligibleSignals.length > 0) {
-    const maxPaths = Math.min(3, eligibleSignals.length);
-    for (let i = 0; i < maxPaths; i++) {
-      const signal = eligibleSignals[i];
-      lines.push('If ' + signal.pattern_key + ' continues at current rate, activity in ' + signal.field + ' may remain observable.');
+  
+  lines.push('B. Emerging (below threshold)');
+  if (emerging.length > 0) {
+    for (const signal of emerging.slice(0, 5)) {
+      const ratio = signal.possible > 0 ? (signal.count / signal.possible * 100).toFixed(0) : 0;
+      lines.push(signal.pattern_key + ': ' + signal.count + '/' + signal.possible + ' (' + ratio + '%).');
     }
-    lines.push('');
-    lines.push('These are observations, not recommendations.');
   } else {
-    lines.push('No visible paths identified.');
+    lines.push('None.');
+  }
+  lines.push('');
+  
+  lines.push('C. Collapsed');
+  if (collapsed.length > 0) {
+    for (const signal of collapsed.slice(0, 3)) {
+      lines.push(signal.pattern_key + ' no longer sustained.');
+    }
+  } else {
+    lines.push('None.');
   }
   lines.push('');
   lines.push('');
-
-  // VII. Commitments in Context
-  lines.push('VII. Commitments in Context');
+  
+  // External Context
+  lines.push('External Context');
+  lines.push('');
+  if (surfaceA && surfaceA.context) {
+    lines.push(surfaceA.context);
+  } else {
+    lines.push('None recorded.');
+  }
+  lines.push('');
+  lines.push('');
+  
+  // DECIDED Commitments
+  lines.push('DECIDED Commitments');
   lines.push('');
   if (decidedItems.length > 0) {
     for (const item of decidedItems) {
       if (item.title) {
         lines.push(item.title + '.');
       }
-      if (item.description) {
-        lines.push(item.description + '.');
-      }
     }
   } else {
-    lines.push('No confirmed commitments in DECIDED.');
+    lines.push('None.');
   }
   lines.push('');
   lines.push('');
-
-  // VIII. Closing Note
-  lines.push('VIII. Closing Note');
+  
+  // Readiness & Posture
+  lines.push('Readiness & Posture');
   lines.push('');
-  lines.push('The week\'s patterns are documented. System state is observable.');
+  const readiness = _assessReadiness(executionData, surfaceA);
+  lines.push('Readiness: ' + readiness.level + '. Cause: ' + readiness.cause + '.');
+  lines.push('');
+  lines.push('');
+  
+  // Forward Tension
+  lines.push('Forward Tension');
+  lines.push('');
+  const tensions = _identifyForwardTension(executionData, projects);
+  if (tensions.length > 0) {
+    for (const tension of tensions) {
+      lines.push(tension + '.');
+    }
+  } else {
+    lines.push('None identified.');
+  }
+  lines.push('');
+  lines.push('');
+  
+  // Closing Statement
+  lines.push('Closing Statement');
+  lines.push('');
+  const closing = _generateClosingStatement(executionData, surfaceA);
+  lines.push(closing);
   lines.push('');
 
   return lines.join('\n');
+}
+
+function _readWeeklySurfaceA() {
+  const sheet = _getSheet('SURFACE_A');
+  if (!sheet) {
+    return null;
+  }
+  const data = sheet.getDataRange().getValues();
+  if (data.length === 0) {
+    return null;
+  }
+  
+  const keyValueMap = {};
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (row.length >= 2) {
+      const key = String(row[0] || '').trim();
+      const value = row[1];
+      if (key) {
+        keyValueMap[key] = value;
+      }
+    }
+  }
+  
+  if (keyValueMap['last_run_status'] !== 'SUCCESS') {
+    return null;
+  }
+  
+  return {
+    orientation: keyValueMap['orientation'] ? String(keyValueMap['orientation']).trim() : '',
+    framing: keyValueMap['framing'] ? String(keyValueMap['framing']).trim() : '',
+    attention: keyValueMap['attention'] ? String(keyValueMap['attention']).trim() : '',
+    context: keyValueMap['context'] ? String(keyValueMap['context']).trim() : ''
+  };
+}
+
+function _readExecutionData() {
+  try {
+    const tasks = typeof listOpenTasks === 'function' ? listOpenTasks() : [];
+    const allTasks = _readAllExecutionTasks();
+    
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    let completedCount = 0;
+    let agingCount = 0;
+    let projectLinkedTasks = 0;
+    
+    for (const task of allTasks) {
+      if (task.state === 'done' && task.completed_at) {
+        const completedDate = new Date(task.completed_at);
+        if (completedDate >= sevenDaysAgo) {
+          completedCount++;
+        }
+      }
+      if (task.state === 'open' && task.created_at) {
+        const createdDate = new Date(task.created_at);
+        if (createdDate < sevenDaysAgo) {
+          agingCount++;
+        }
+      }
+      if (task.project_id && task.project_id.trim()) {
+        projectLinkedTasks++;
+      }
+    }
+    
+    const carriedCount = tasks.length;
+    
+    return {
+      openCount: tasks.length,
+      completedCount: completedCount,
+      carriedCount: carriedCount,
+      agingCount: agingCount,
+      projectLinkedTasks: projectLinkedTasks
+    };
+  } catch (e) {
+    return {
+      openCount: 0,
+      completedCount: 0,
+      carriedCount: 0,
+      agingCount: 0,
+      projectLinkedTasks: 0
+    };
+  }
+}
+
+function _readAllExecutionTasks() {
+  try {
+    const sheet = _getSheet('EXECUTION_TASKS');
+    if (!sheet) {
+      return [];
+    }
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      return [];
+    }
+    
+    const headerRow = data[0];
+    const idIdx = headerRow.indexOf('task_id');
+    const stateIdx = headerRow.indexOf('state');
+    const createdIdx = headerRow.indexOf('created_at');
+    const completedIdx = headerRow.indexOf('completed_at');
+    const projectIdIdx = headerRow.indexOf('project_id');
+    
+    if (idIdx === -1 || stateIdx === -1) {
+      return [];
+    }
+    
+    const tasks = [];
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      tasks.push({
+        task_id: row[idIdx],
+        state: String(row[stateIdx] || '').trim(),
+        created_at: createdIdx >= 0 ? row[createdIdx] : null,
+        completed_at: completedIdx >= 0 ? row[completedIdx] : null,
+        project_id: projectIdIdx >= 0 ? (row[projectIdIdx] ? String(row[projectIdIdx]).trim() : '') : ''
+      });
+    }
+    
+    return tasks;
+  } catch (e) {
+    return [];
+  }
+}
+
+function _readProjectsFromDecided() {
+  try {
+    const items = _readConfirmedSpeakable();
+    return items.filter(item => item.type === 'Project');
+  } catch (e) {
+    return [];
+  }
+}
+
+function _getEmergingSignals(allSignals, eligibleSignals) {
+  const eligibleKeys = new Set(eligibleSignals.map(s => s.pattern_key));
+  return allSignals.filter(s => {
+    if (eligibleKeys.has(s.pattern_key)) {
+      return false;
+    }
+    const windowDays = _extractWindowDays(s.window);
+    if (windowDays < 7 || windowDays > 14) {
+      return false;
+    }
+    if (s.possible === 0) {
+      return false;
+    }
+    const ratio = s.count / s.possible;
+    return ratio > 0 && ratio < WEEKLY_ELIGIBILITY_THRESHOLD;
+  });
+}
+
+function _getCollapsedSignals(allSignals, eligibleSignals) {
+  return [];
+}
+
+function _assessReadiness(executionData, surfaceA) {
+  if (executionData.agingCount > 5 || executionData.openCount > 15) {
+    return { level: 'Degraded', cause: 'Load' };
+  }
+  if (executionData.openCount > 8) {
+    return { level: 'Medium', cause: 'Load' };
+  }
+  if (surfaceA && surfaceA.context) {
+    return { level: 'Medium', cause: 'Environment' };
+  }
+  return { level: 'High', cause: 'Unknown' };
+}
+
+function _identifyForwardTension(executionData, projects) {
+  const tensions = [];
+  if (executionData.agingCount > 0) {
+    tensions.push(executionData.agingCount + ' aging task' + (executionData.agingCount !== 1 ? 's' : '') + ' approaching');
+  }
+  if (executionData.openCount > 10) {
+    tensions.push('Open task count: ' + executionData.openCount);
+  }
+  if (projects.length > 0 && executionData.projectLinkedTasks === 0) {
+    tensions.push('Projects active but no project-linked tasks');
+  }
+  return tensions;
+}
+
+function _generateClosingStatement(executionData, surfaceA) {
+  if (executionData.completedCount > 0 && executionData.carriedCount === 0) {
+    return 'All tasks completed. No carryover.';
+  }
+  if (executionData.carriedCount > executionData.completedCount) {
+    return 'More tasks carried than completed.';
+  }
+  if (executionData.completedCount > 0) {
+    return 'Some movement recorded.';
+  }
+  return 'No movement recorded this week.';
 }
 
 // ================== WRITE OUTPUT ==================
@@ -353,32 +625,39 @@ function _writeWeeklyBriefToDoc(weeklyText) {
 }
 
 // ================== TRIGGER SETUP ==================
-// Ensures a weekly Sunday trigger exists for runSurfaceBWeeklyOnce.
-// Idempotent: will not create duplicate triggers.
-function ensureWeeklySundayTrigger() {
-  // Scan existing triggers for runSurfaceBWeeklyOnce
+function ensureWeeklySunday8amTrigger() {
   const existingTriggers = ScriptApp.getProjectTriggers();
-  let hasWeeklyTrigger = false;
+  const weeklyFunctions = ['runSurfaceBWeeklyOnce'];
+  let deletedCount = 0;
+  let hasCorrectTrigger = false;
 
   for (let i = 0; i < existingTriggers.length; i++) {
     const trigger = existingTriggers[i];
     const handlerFunction = trigger.getHandlerFunction();
     
-    if (handlerFunction === 'runSurfaceBWeeklyOnce') {
-      hasWeeklyTrigger = true;
-      Logger.log('Weekly Sunday trigger already exists. No action taken.');
-      break;
+    if (weeklyFunctions.indexOf(handlerFunction) !== -1) {
+      if (trigger.getEventType() === ScriptApp.EventType.CLOCK &&
+          trigger.getWeekDay() === ScriptApp.WeekDay.SUNDAY &&
+          trigger.getHour() === 8) {
+        hasCorrectTrigger = true;
+      } else {
+        ScriptApp.deleteTrigger(trigger);
+        deletedCount++;
+      }
     }
   }
 
-  // Create trigger if it doesn't exist
-  if (!hasWeeklyTrigger) {
+  if (!hasCorrectTrigger) {
     ScriptApp.newTrigger('runSurfaceBWeeklyOnce')
       .timeBased()
       .onWeekDay(ScriptApp.WeekDay.SUNDAY)
-      .atHour(7) // 7:00 AM local time
+      .atHour(8)
       .create();
-    Logger.log('Weekly Sunday trigger created for runSurfaceBWeeklyOnce (Sundays at 7:00 AM).');
+    Logger.log('Weekly Sunday trigger created: runSurfaceBWeeklyOnce (Sundays at 8:00 AM).');
+  } else if (deletedCount > 0) {
+    Logger.log('Weekly Sunday trigger verified: runSurfaceBWeeklyOnce (Sundays at 8:00 AM). Removed ' + deletedCount + ' duplicate trigger(s).');
+  } else {
+    Logger.log('Weekly Sunday trigger already exists: runSurfaceBWeeklyOnce (Sundays at 8:00 AM).');
   }
 }
 

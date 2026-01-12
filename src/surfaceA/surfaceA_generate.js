@@ -67,7 +67,7 @@ function _generateSurfaceASubstrate(rawNotes) {
   Logger.log(aiText);
   Logger.log('=== SURFACE A OUTPUT END ===');
 
-  const substrate = _parseSurfaceAJSON(aiText);
+  const substrate = _parseSurfaceASections(aiText);
   
   return substrate;
 }
@@ -82,64 +82,95 @@ ${rawNotes.map(n => '- ' + n).join('\n')}
 
 OUTPUT RULES:
 - ${langInstruction}
-- Return ONLY valid JSON. No markdown. No code blocks.
-- All values must be strings.
-- Each field may contain 0–2 complete sentences. Prefer 1 sentence when possible.
 - Complete sentences only. No bullets, lists, or leading symbols.
-- If information is insufficient, return "" for that field.
+- Each section may contain 0–2 complete sentences. Prefer 1 sentence when possible.
+- If information is insufficient, leave the section empty.
 - Descriptive only. No advice, no judgment, no interpretation.
+- No explanations, no meta text, no JSON, no markdown.
+
+OUTPUT FORMAT:
+ORIENTATION:
+<0–2 complete sentences or empty>
+
+ATTENTION:
+<0–2 complete sentences or empty>
+
+CONTEXT:
+<0–2 complete sentences or empty>
+
+FRAMING:
+<0–2 complete sentences or empty>
+
+REFLECTION:
+<0–2 complete sentences or empty>
+
+CONSTRAINTS:
+<0–2 complete sentences or empty>
 
 FIELD DEFINITIONS:
-- orientation: What the day was broadly oriented around, if observable.
-- attention: Where cognitive or emotional attention was primarily directed.
-- context: Factual situational backdrop (events, people, circumstances).
-- framing: How the day was implicitly experienced or structured.
-- reflection: Notable internal observations explicitly present in RAW.
-- constraints: Observed limitations (time, energy, availability, attention).
+- ORIENTATION: What the day was broadly oriented around, if observable.
+- ATTENTION: Where cognitive or emotional attention was primarily directed.
+- CONTEXT: Factual situational backdrop (events, people, circumstances).
+- FRAMING: How the day was implicitly experienced or structured.
+- REFLECTION: Notable internal observations explicitly present in RAW.
+- CONSTRAINTS: Observed limitations (time, energy, availability, attention).
 
-REQUIRED JSON SCHEMA:
-{
-  "orientation": "",
-  "attention": "",
-  "context": "",
-  "framing": "",
-  "reflection": "",
-  "constraints": ""
+Return ONLY the section-delimited text as shown above.`;
 }
 
-Return ONLY the JSON object.`;
-}
-
-function _parseSurfaceAJSON(text) {
-  let jsonText = text.trim();
-  
-  // Remove markdown code blocks if present
-  jsonText = jsonText.replace(/^```json\s*/i, '');
-  jsonText = jsonText.replace(/^```\s*/i, '');
-  jsonText = jsonText.replace(/\s*```$/i, '');
-  jsonText = jsonText.trim();
-  
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch (e) {
-    throw new Error('INVALID JSON — Failed to parse Surface A output: ' + e.message);
-  }
-  
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('INVALID JSON — Surface A output is not an object');
-  }
-  
-  const substrate = {
-    orientation: _sanitizeField(parsed.orientation),
-    attention: _sanitizeField(parsed.attention),
-    context: _sanitizeField(parsed.context),
-    framing: _sanitizeField(parsed.framing),
-    reflection: _sanitizeField(parsed.reflection),
-    constraints: _sanitizeField(parsed.constraints)
+function _parseSurfaceASections(text) {
+  const sections = {
+    orientation: '',
+    attention: '',
+    context: '',
+    framing: '',
+    reflection: '',
+    constraints: ''
   };
   
-  return substrate;
+  if (!text || typeof text !== 'string') {
+    return sections;
+  }
+  
+  const sectionHeaders = [
+    { key: 'orientation', pattern: /^ORIENTATION:\s*$/im },
+    { key: 'attention', pattern: /^ATTENTION:\s*$/im },
+    { key: 'context', pattern: /^CONTEXT:\s*$/im },
+    { key: 'framing', pattern: /^FRAMING:\s*$/im },
+    { key: 'reflection', pattern: /^REFLECTION:\s*$/im },
+    { key: 'constraints', pattern: /^CONSTRAINTS:\s*$/im }
+  ];
+  
+  const lines = text.split('\n');
+  let currentSection = null;
+  let currentContent = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let isHeader = false;
+    
+    for (let j = 0; j < sectionHeaders.length; j++) {
+      if (sectionHeaders[j].pattern.test(line)) {
+        if (currentSection !== null) {
+          sections[currentSection] = _sanitizeField(currentContent.join('\n').trim());
+        }
+        currentSection = sectionHeaders[j].key;
+        currentContent = [];
+        isHeader = true;
+        break;
+      }
+    }
+    
+    if (!isHeader && currentSection !== null) {
+      currentContent.push(line);
+    }
+  }
+  
+  if (currentSection !== null) {
+    sections[currentSection] = _sanitizeField(currentContent.join('\n').trim());
+  }
+  
+  return sections;
 }
 
 function _sanitizeField(value) {

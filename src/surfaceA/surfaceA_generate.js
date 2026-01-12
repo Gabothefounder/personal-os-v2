@@ -264,35 +264,42 @@ GLOBAL RULES:
 - All sentences must end with terminal punctuation.
 - All sentences must be complete. No ellipses. No unfinished phrases.
 - Output must be entirely in a single language. Do not mix languages.
+- Use ONE language only. Do not mix languages.
+- Write in complete sentences only.
+- Do not use bullet points, lists, or leading symbols.
+- Do not truncate sentences.
+- Prefer fewer complete sentences over many partial ones.
+- If content is unclear, output less text, not unfinished text.
+- Each field may contain multiple sentences, but every sentence must be complete.
 - It is acceptable to return an empty string if no actions exist.
 
 ORIENTATION PURPOSE:
-List finite, concrete, near-term actions.
+Write 1–3 complete sentences describing finite, concrete, near-term actions.
 
 RULES:
-- Maximum 3 bullets.
-- Each bullet must be complete and specific.
-- Each bullet must include a clear verb and object.
+- Maximum 3 complete sentences.
+- Each sentence must be complete and specific.
+- Each sentence must include a clear verb and object.
 - Avoid duplication.
+- Do not use bullets, lists, or leading symbols.
 
 DEDUPLICATION RULE:
-If two bullets share the same verb and object, keep ONLY the more specific one.
+If two sentences share the same verb and object, keep ONLY the more specific one.
 
 EXAMPLES:
 Bad:
-• Send a report.
-• Send a report to Kristen.
+Send a report.
+Send a report to Kristen.
 
 Good:
-• Send a report from Lucid to Kristen within two weeks.
+Send a report from Lucid to Kristen within two weeks.
 
-Each statement may be a full sentence if needed to be self-contained.
-Items must be concrete, action-oriented, and complete clauses.
-Items must NOT end with conjunctions (and, or), prepositions (to, for, with), or auxiliary verbs.
+Each sentence must be concrete, action-oriented, and complete.
+Sentences must NOT end with conjunctions (and, or), prepositions (to, for, with), or auxiliary verbs.
 If an action cannot be completed cleanly, it MUST be omitted rather than truncated.
-DO NOT output incomplete bullets like "Send a report" — either include full scope or omit entirely.
+DO NOT output incomplete sentences like "Send a report" — either include full scope or omit entirely.
 
-Statements must describe observable actions, reviews, or concrete focus areas grounded in RAW.
+Sentences must describe observable actions, reviews, or concrete focus areas grounded in RAW.
 Focus on operational orientation, not micro-action fragments.
 Do NOT describe internal judgments, interpretations, or abstract goals.
 Do NOT add prioritization, advice, or interpretation.
@@ -311,10 +318,19 @@ GLOBAL RULES:
 - Never imply obligation.
 - Avoid abstract filler.
 - All sentences must end with terminal punctuation.
+- All sentences must be complete. No ellipses. No unfinished phrases.
+- Output must be entirely in a single language. Do not mix languages.
+- Use ONE language only. Do not mix languages.
+- Write in complete sentences only.
+- Do not use bullet points, lists, or leading symbols.
+- Do not truncate sentences.
+- Prefer fewer complete sentences over many partial ones.
+- If content is unclear, output less text, not unfinished text.
+- Each field may contain multiple sentences, but every sentence must be complete.
 - It is acceptable to return an empty string if no attention framing exists.
 
 ATTENTION PURPOSE:
-Describe how attention is being allocated or framed internally.
+Write 1–3 complete sentences describing how attention is being allocated or framed internally.
 This may include social or relational framing if explicitly present in RAW.
 
 RULES:
@@ -326,6 +342,7 @@ RULES:
   - expectation-setting
   - psychological diagnosis
   - moral judgment
+- Do not use bullets, lists, or leading symbols.
 
 EXAMPLES:
 Allowed:
@@ -335,11 +352,11 @@ Forbidden:
 "This relationship should not be pursued."
 "This indicates avoidance."
 
-Return exactly one sentence, or return an empty string if no attention framing exists.
+Return 1–3 complete sentences, or return an empty string if no attention framing exists.
 Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
 If a complete sentence cannot be produced, return an empty string.
-End the sentence with a period if returning text.
-Stop after the sentence or empty string.
+End each sentence with a period if returning text.
+Stop after the sentences or empty string.
 No extra text.`;
 }
 
@@ -355,16 +372,26 @@ GLOBAL RULES:
 - Never imply obligation.
 - Avoid abstract filler.
 - All sentences must end with terminal punctuation.
+- All sentences must be complete. No ellipses. No unfinished phrases.
+- Output must be entirely in a single language. Do not mix languages.
+- Use ONE language only. Do not mix languages.
+- Write in complete sentences only.
+- Do not use bullet points, lists, or leading symbols.
+- Do not truncate sentences.
+- Prefer fewer complete sentences over many partial ones.
+- If content is unclear, output less text, not unfinished text.
+- Each field may contain multiple sentences, but every sentence must be complete.
 - It is acceptable to return an empty string if no concrete facts exist.
 
 CONTEXT PURPOSE:
-Record concrete, external facts and logistics only.
+Write 1–3 complete sentences recording concrete, external facts and logistics only.
 
 RULES:
 - Only include observable events, actions, or references.
 - No internal states, intentions, or abstractions.
 - No relationship evaluation.
 - If no concrete facts exist, return an empty string.
+- Do not use bullets, lists, or leading symbols.
 
 EXAMPLES:
 Good:
@@ -373,8 +400,8 @@ Good:
 Bad:
 "The day involved professional and social considerations."
 
-The sentence must report concrete situational facts only: people, communications, obligations, events.
-The sentence MUST reference at least one concrete noun (person, message, document, payment, event).
+Each sentence must report concrete situational facts only: people, communications, obligations, events.
+Each sentence MUST reference at least one concrete noun (person, message, document, payment, event).
 Abstract summaries of the day are NOT allowed.
 Narrative phrasing (e.g., "a day of", "thoughts unfolded", "reflections") is forbidden.
 Reference specific, observable nouns from RAW (people, projects, objects, constraints, institutions).
@@ -390,8 +417,8 @@ Do not generalize or interpret.
 Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
 If a complete sentence cannot be produced, return an empty string.
 If no concrete external facts are available, return an empty string.
-End the sentence with a period if returning text.
-Stop immediately after the period or empty string.
+End each sentence with a period if returning text.
+Stop immediately after the sentences or empty string.
 No extra text.`;
 }
 
@@ -407,10 +434,19 @@ GLOBAL RULES:
 - Never imply obligation.
 - Avoid abstract filler.
 - All sentences must end with terminal punctuation.
+- All sentences must be complete. No ellipses. No unfinished phrases.
+- Output must be entirely in a single language. Do not mix languages.
+- Use ONE language only. Do not mix languages.
+- Write in complete sentences only.
+- Do not use bullet points, lists, or leading symbols.
+- Do not truncate sentences.
+- Prefer fewer complete sentences over many partial ones.
+- If content is unclear, output less text, not unfinished text.
+- Each field may contain multiple sentences, but every sentence must be complete.
 - It is acceptable to return an empty string if insufficient grounding exists.
 
 FRAMING PURPOSE:
-Provide a high-level description of the day WITHOUT interpretation.
+Write 1–3 complete sentences providing a high-level description of the day WITHOUT interpretation.
 
 RULES:
 - Must be grounded in Context or Orientation.
@@ -418,6 +454,7 @@ RULES:
 - No abstract themes.
 - No emotional language.
 - If insufficient grounding exists, return an empty string.
+- Do not use bullets, lists, or leading symbols.
 
 EXAMPLES:
 Good:
@@ -427,13 +464,13 @@ Bad:
 "The day reflects balancing professional and social priorities."
 
 Framing is optional. You may return no text.
-If you return text, it must be one short, complete sentence.
-The sentence must be concrete and factual. It may summarize the day, but:
+If you return text, it must be 1–3 short, complete sentences.
+Each sentence must be concrete and factual. It may summarize the day, but:
 - Must reference specific, observable elements (people, activities, events)
 - Must avoid abstraction like "considerations", "themes", "reflections", "thoughts"
 - Must avoid vague containers like "a day of" or "involved"
 
-The sentence should hold the shape of the day, not explain it.
+The sentences should hold the shape of the day, not explain it.
 Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
 If a complete sentence cannot be produced, return an empty string.
 Avoid conjunctions ("and", "but", "which", "while").
@@ -441,9 +478,9 @@ Avoid abstraction and explanation.
 Do not motivate, advise, summarize, or interpret.
 Do not use quotes or reference external authors.
 Do not introduce insight or conclusions.
-The framing should feel like a quiet container sentence that could be read aloud without pressure.
-End the sentence with terminal punctuation (. ! ?) if returning text.
-Stop immediately after the sentence or empty string.
+The framing should feel like quiet container sentences that could be read aloud without pressure.
+End each sentence with terminal punctuation (. ! ?) if returning text.
+Stop immediately after the sentences or empty string.
 If a complete sentence cannot be produced safely, return an empty string.
 No extra text.`;
 }
@@ -460,10 +497,19 @@ GLOBAL RULES:
 - Never imply obligation.
 - Avoid abstract filler.
 - All sentences must end with terminal punctuation.
+- All sentences must be complete. No ellipses. No unfinished phrases.
+- Output must be entirely in a single language. Do not mix languages.
+- Use ONE language only. Do not mix languages.
+- Write in complete sentences only.
+- Do not use bullet points, lists, or leading symbols.
+- Do not truncate sentences.
+- Prefer fewer complete sentences over many partial ones.
+- If content is unclear, output less text, not unfinished text.
+- Each field may contain multiple sentences, but every sentence must be complete.
 - It is acceptable to return an empty string if no explicit reflection exists in RAW.
 
 REFLECTION PURPOSE:
-Surface explicit self-observation ONLY if directly stated in RAW.
+Write 1–3 complete sentences surfacing explicit self-observation ONLY if directly stated in RAW.
 
 RULES:
 - Only include reflection if RAW contains explicit reflective language
@@ -471,6 +517,7 @@ RULES:
 - Never infer reflection.
 - Never resolve or explain emotions.
 - Silence is preferred over speculation.
+- Do not use bullets, lists, or leading symbols.
 
 EXAMPLES:
 Allowed:
@@ -478,9 +525,9 @@ Allowed:
 
 If no such material exists, return an empty string.
 
-Reflection is optional. Return 0–3 reflective sentences, one per line, or return an empty string.
+Reflection is optional. Return 1–3 complete reflective sentences, or return an empty string.
 
-Each reflection item must be one complete, self-contained sentence.
+Each reflection sentence must be one complete, self-contained sentence.
 Use reflective phrasing (observational, third-person) rather than diary phrasing (first-person, emotional).
 
 Requirements:
@@ -517,10 +564,17 @@ GLOBAL RULES:
 - All sentences must end with terminal punctuation.
 - All sentences must be complete. No ellipses. No unfinished phrases.
 - Output must be entirely in a single language. Do not mix languages.
+- Use ONE language only. Do not mix languages.
+- Write in complete sentences only.
+- Do not use bullet points, lists, or leading symbols.
+- Do not truncate sentences.
+- Prefer fewer complete sentences over many partial ones.
+- If content is unclear, output less text, not unfinished text.
+- Each field may contain multiple sentences, but every sentence must be complete.
 - It is acceptable to return an empty string if no constraints exist.
 
 CONSTRAINTS PURPOSE:
-Record mechanical or situational limits observed during the day.
+Write 1–3 complete sentences recording mechanical or situational limits observed during the day.
 
 RULES:
 - Descriptive only.
@@ -528,6 +582,7 @@ RULES:
 - No leverage language.
 - No interpretation.
 - May be empty if none are observed.
+- Do not use bullets, lists, or leading symbols.
 
 EXAMPLES:
 Good:
@@ -537,11 +592,11 @@ Bad:
 "Should manage time better."
 "Leverage opportunities were limited."
 
-Return exactly one sentence describing observed constraints, or return an empty string if none exist.
+Return 1–3 complete sentences describing observed constraints, or return an empty string if none exist.
 Do not end sentences with conjunctions such as 'and', 'or', 'to', 'for', 'with'.
 If a complete sentence cannot be produced, return an empty string.
-End the sentence with a period if returning text.
-Stop after the sentence or empty string.
+End each sentence with a period if returning text.
+Stop after the sentences or empty string.
 No extra text.`;
 }
 
@@ -551,32 +606,31 @@ function _parseOrientation(text) {
     throw new Error('EMPTY ORIENTATION TEXT — Cannot parse orientation');
   }
 
-  const lines = text.trim().split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
+  const sentences = text.trim().split(/[.!?]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
 
-  if (lines.length === 0) {
-    throw new Error('INVALID ORIENTATION — No items found');
+  if (sentences.length === 0) {
+    throw new Error('INVALID ORIENTATION — No sentences found');
   }
 
-  if (lines.length < 1 || lines.length > 5) {
-    throw new Error('INVALID ORIENTATION — Must have 1–5 items');
+  if (sentences.length < 1 || sentences.length > 3) {
+    throw new Error('INVALID ORIENTATION — Must have 1–3 sentences');
   }
 
-  // Validate each item
-  for (let i = 0; i < lines.length; i++) {
-    const item = lines[i];
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i];
     
-    if (item.length < 5) {
-      throw new Error('INVALID ORIENTATION — Item too short: "' + item + '"');
+    if (sentence.length < 5) {
+      throw new Error('INVALID ORIENTATION — Sentence too short: "' + sentence + '"');
     }
     
-    if (item.endsWith(',')) {
-      throw new Error('INVALID ORIENTATION — Item ends with comma: "' + item + '"');
+    if (sentence.endsWith(',') || sentence.endsWith(';') || sentence.endsWith(':')) {
+      throw new Error('INVALID ORIENTATION — Sentence appears incomplete: "' + sentence + '"');
     }
   }
 
-  return lines;
+  return sentences;
 }
 
 function _parseReflection(text) {
@@ -584,29 +638,27 @@ function _parseReflection(text) {
     return [];
   }
 
-  const lines = text.trim().split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
+  const sentences = text.trim().split(/[.!?]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
 
-  if (lines.length > 2) {
-    throw new Error('INVALID REFLECTION — Must have 0–2 items, found ' + lines.length);
+  if (sentences.length > 3) {
+    throw new Error('INVALID REFLECTION — Must have 0–3 sentences, found ' + sentences.length);
   }
 
-  // Validate each reflection item is a complete sentence
-  for (let i = 0; i < lines.length; i++) {
-    const item = lines[i];
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i];
     
-    if (!item.match(/[.!?]$/)) {
-      throw new Error('INVALID REFLECTION — Item must end with sentence punctuation: "' + item + '"');
+    if (sentence.length < 5) {
+      throw new Error('INVALID REFLECTION — Sentence too short: "' + sentence + '"');
     }
     
-    // Reject items ending with comma (likely truncated)
-    if (item.endsWith(',')) {
-      throw new Error('INVALID REFLECTION — Item appears truncated: "' + item + '"');
+    if (sentence.endsWith(',') || sentence.endsWith(';') || sentence.endsWith(':')) {
+      throw new Error('INVALID REFLECTION — Sentence appears incomplete: "' + sentence + '"');
     }
   }
 
-  return lines;
+  return sentences;
 }
 
 function _parseStringField(text, fieldName) {

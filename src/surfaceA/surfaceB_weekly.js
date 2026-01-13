@@ -38,14 +38,16 @@ const WEEKLY_ELIGIBILITY_THRESHOLD = 0.4; // 40% recurrence rate
 function runSurfaceBWeeklyOnce() {
   Logger.log('--- SURFACE B WEEKLY BRIEF START ---');
 
+  const archiveRows = _getSurfaceAArchiveLastNDays(7);
   const derivedSignals = _readDerivedSignals();
   const eligibleSignals = derivedSignals && derivedSignals.length > 0 
     ? _selectEligibleSignals(derivedSignals) 
     : [];
   const decidedItems = _readConfirmedSpeakable();
+  const executionData = _readExecutionData();
 
   // Silence is acceptable output - always compose brief even if empty
-  const brief = _composeWeeklyBrief(eligibleSignals, decidedItems);
+  const brief = _composeWeeklyBrief(archiveRows, eligibleSignals, decidedItems, executionData);
 
   Logger.log('=== WEEKLY BRIEF ===');
   Logger.log(brief);
@@ -56,6 +58,65 @@ function runSurfaceBWeeklyOnce() {
   _writeWeeklyBriefToDoc(brief);
 
   Logger.log('--- SURFACE B WEEKLY BRIEF END ---');
+}
+
+// ================== ARCHIVE HELPERS ==================
+function _getSurfaceAArchiveLastNDays(days) {
+  const sheet = _getSheet('SURFACE_A_ARCHIVE');
+  if (!sheet) {
+    return [];
+  }
+  
+  const data = sheet.getDataRange().getValues();
+
+  if (data.length <= 1) return [];
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
+  return data.slice(1).filter(row => {
+    if (!row[0]) return false;
+    const archivedAt = new Date(row[0]);
+    if (isNaN(archivedAt.getTime())) return false;
+    return archivedAt >= cutoff;
+  });
+}
+
+// ================== LANGUAGE DETECTION ==================
+function _detectLanguageFromArchive(archiveRows) {
+  if (!archiveRows || archiveRows.length === 0) {
+    return 'en';
+  }
+  
+  // Sample text from archive rows (orientation, attention, context, framing)
+  let sampleText = '';
+  for (const row of archiveRows.slice(0, 5)) {
+    // Archive columns: archived_at, run_id, orientation, attention, context, framing, reflection, constraints
+    if (row.length > 2) {
+      sampleText += (row[2] || '') + ' '; // orientation
+      sampleText += (row[3] || '') + ' '; // attention
+      sampleText += (row[4] || '') + ' '; // context
+      sampleText += (row[5] || '') + ' '; // framing
+    }
+  }
+  
+  if (!sampleText.trim()) {
+    return 'en';
+  }
+  
+  // Simple heuristic: check for French indicators
+  const frenchIndicators = /\b(le|la|les|de|du|des|un|une|et|ou|dans|sur|avec|pour|par|est|sont|était|étaient|être|avoir|fait|faire)\b/i;
+  const hasFrench = frenchIndicators.test(sampleText);
+  
+  // Check for French-specific characters/patterns
+  const frenchChars = /[àâäéèêëïîôùûüÿç]/i;
+  const hasFrenchChars = frenchChars.test(sampleText);
+  
+  if (hasFrench || hasFrenchChars) {
+    return 'fr';
+  }
+  
+  return 'en';
 }
 
 // ================== READ SOURCES ==================
@@ -150,104 +211,62 @@ function _extractWindowDays(windowStr) {
 }
 
 // ================== COMPOSE BRIEF ==================
-function _composeWeeklyBrief(eligibleSignals, decidedItems) {
+function _composeWeeklyBrief(archiveRows, eligibleSignals, decidedItems, executionData) {
   const lines = [];
   
-  const surfaceA = _readWeeklySurfaceA();
-  const executionData = _readExecutionData();
+  // LANGUAGE LOCK: Detect language from archive
+  const language = _detectLanguageFromArchive(archiveRows);
+  const headers = _getWeeklyHeaders(language);
+  
+  // Aggregate Surface A data from archive
+  const aggregated = _aggregateArchiveData(archiveRows);
   const projects = _readProjectsFromDecided();
   const allDerivedSignals = _readDerivedSignals() || [];
   
-  // Operating Reality
-  lines.push('Operating Reality');
+  // I. Operating Reality
+  lines.push(headers.operatingReality);
   lines.push('');
-  if (surfaceA && (surfaceA.orientation || surfaceA.framing)) {
-    const realityParts = [];
-    if (surfaceA.orientation) {
-      realityParts.push(surfaceA.orientation);
-    }
-    if (surfaceA.framing) {
-      realityParts.push(surfaceA.framing);
-    }
-    lines.push(realityParts.join(' '));
+  if (aggregated.orientation || aggregated.framing) {
+    const realityText = _synthesizeOperatingReality(aggregated.orientation, aggregated.framing, language);
+    lines.push(realityText);
   } else {
-    lines.push('No operational orientation recorded.');
+    const noData = language === 'fr' 
+      ? 'Aucune orientation opérationnelle enregistrée cette semaine.'
+      : 'No operational orientation recorded this week.';
+    lines.push(noData);
   }
-  lines.push('');
   lines.push('');
   
-  // Pressure & Load
-  lines.push('Pressure & Load');
+  // II. Attention & Load
+  lines.push(headers.attentionLoad);
   lines.push('');
-  const pressureParts = [];
-  if (executionData.openCount > 0) {
-    pressureParts.push(executionData.openCount + ' open task' + (executionData.openCount !== 1 ? 's' : ''));
-  }
-  if (executionData.agingCount > 0) {
-    pressureParts.push(executionData.agingCount + ' aging task' + (executionData.agingCount !== 1 ? 's' : ''));
-  }
-  if (surfaceA && surfaceA.attention) {
-    pressureParts.push('Attention cues: ' + surfaceA.attention);
-  }
-  if (pressureParts.length > 0) {
-    lines.push(pressureParts.join('. ') + '.');
-  } else {
-    lines.push('No pressure indicators recorded.');
-  }
-  lines.push('');
+  const attentionText = _synthesizeAttentionLoad(aggregated.attention, executionData, language);
+  lines.push(attentionText);
   lines.push('');
   
-  // Movement & Friction
-  lines.push('Movement & Friction');
+  // III. Movement & Friction
+  lines.push(headers.movementFriction);
   lines.push('');
-  const movementParts = [];
-  if (executionData.completedCount > 0) {
-    movementParts.push(executionData.completedCount + ' task' + (executionData.completedCount !== 1 ? 's' : '') + ' completed');
-  }
-  if (executionData.carriedCount > 0) {
-    movementParts.push(executionData.carriedCount + ' task' + (executionData.carriedCount !== 1 ? 's' : '') + ' carried forward');
-  }
-  if (movementParts.length > 0) {
-    lines.push('Movement: ' + movementParts.join('. ') + '.');
-  } else {
-    lines.push('No movement recorded.');
-  }
-  if (executionData.carriedCount > 0) {
-    lines.push('Friction: ' + executionData.carriedCount + ' task' + (executionData.carriedCount !== 1 ? 's' : '') + ' stalled or repeated.');
-  } else {
-    lines.push('Friction: none recorded.');
-  }
-  lines.push('');
+  const movementText = _synthesizeMovementFriction(executionData, language);
+  lines.push(movementText);
   lines.push('');
   
-  // Leverage & Dependencies
-  lines.push('Leverage & Dependencies');
+  // IV. Leverage & Dependencies
+  lines.push(headers.leverageDependencies);
   lines.push('');
-  const projectTasks = executionData.projectLinkedTasks || 0;
-  if (projects.length > 0 || projectTasks > 0) {
-    const leverageParts = [];
-    if (projects.length > 0) {
-      leverageParts.push(projects.length + ' active project' + (projects.length !== 1 ? 's' : ''));
-    }
-    if (projectTasks > 0) {
-      leverageParts.push(projectTasks + ' project-linked task' + (projectTasks !== 1 ? 's' : ''));
-    }
-    lines.push('Leverage: ' + leverageParts.join('. ') + '.');
-  } else {
-    lines.push('Leverage: none recorded.');
-  }
-  lines.push('');
+  const leverageText = _synthesizeLeverage(projects, executionData, language);
+  lines.push(leverageText);
   lines.push('');
   
-  // Signals (DERIVED)
-  lines.push('Signals (DERIVED)');
+  // V. Signals (DERIVED)
+  lines.push(headers.signals);
   lines.push('');
-  
   const sustained = eligibleSignals || [];
   const emerging = _getEmergingSignals(allDerivedSignals, eligibleSignals);
   const collapsed = _getCollapsedSignals(allDerivedSignals, eligibleSignals);
   
-  lines.push('A. Sustained');
+  const sustainedLabel = language === 'fr' ? 'A. Soutenus' : 'A. Sustained';
+  lines.push(sustainedLabel);
   if (sustained.length > 0) {
     for (const signal of sustained) {
       const windowDays = _extractWindowDays(signal.window);
@@ -255,45 +274,54 @@ function _composeWeeklyBrief(eligibleSignals, decidedItems) {
       lines.push(signal.pattern_key + ': ' + signal.count + '/' + signal.possible + ' (' + ratio + '%) over ' + windowDays + ' days.');
     }
   } else {
-    lines.push('None.');
+    const none = language === 'fr' 
+      ? 'Aucun signal soutenu n\'a atteint le seuil cette semaine.'
+      : 'No sustained signals met threshold this week.';
+    lines.push(none);
   }
   lines.push('');
   
-  lines.push('B. Emerging (below threshold)');
+  const emergingLabel = language === 'fr' ? 'B. Émergents (sous seuil)' : 'B. Emerging (below threshold)';
+  lines.push(emergingLabel);
   if (emerging.length > 0) {
     for (const signal of emerging.slice(0, 5)) {
       const ratio = signal.possible > 0 ? (signal.count / signal.possible * 100).toFixed(0) : 0;
       lines.push(signal.pattern_key + ': ' + signal.count + '/' + signal.possible + ' (' + ratio + '%).');
     }
   } else {
-    lines.push('None.');
+    const none = language === 'fr' ? 'Aucun.' : 'None.';
+    lines.push(none);
   }
   lines.push('');
   
-  lines.push('C. Collapsed');
+  const collapsedLabel = language === 'fr' ? 'C. Effondrés' : 'C. Collapsed';
+  lines.push(collapsedLabel);
   if (collapsed.length > 0) {
     for (const signal of collapsed.slice(0, 3)) {
-      lines.push(signal.pattern_key + ' no longer sustained.');
+      const noLonger = language === 'fr' 
+        ? signal.pattern_key + ' n\'est plus soutenu.'
+        : signal.pattern_key + ' no longer sustained.';
+      lines.push(noLonger);
     }
   } else {
-    lines.push('None.');
+    const none = language === 'fr' ? 'Aucun.' : 'None.';
+    lines.push(none);
   }
   lines.push('');
-  lines.push('');
   
-  // External Context
-  lines.push('External Context');
+  // VI. External Context
+  lines.push(headers.externalContext);
   lines.push('');
-  if (surfaceA && surfaceA.context) {
-    lines.push(surfaceA.context);
+  if (aggregated.context) {
+    lines.push(aggregated.context);
   } else {
-    lines.push('None recorded.');
+    const none = language === 'fr' ? 'Aucun contexte externe enregistré.' : 'No external context recorded.';
+    lines.push(none);
   }
   lines.push('');
-  lines.push('');
   
-  // DECIDED Commitments
-  lines.push('DECIDED Commitments');
+  // VII. DECIDED Commitments
+  lines.push(headers.decidedCommitments);
   lines.push('');
   if (decidedItems.length > 0) {
     for (const item of decidedItems) {
@@ -302,75 +330,238 @@ function _composeWeeklyBrief(eligibleSignals, decidedItems) {
       }
     }
   } else {
-    lines.push('None.');
+    const none = language === 'fr' 
+      ? 'Aucun engagement confirmé.'
+      : 'No commitments were confirmed.';
+    lines.push(none);
   }
   lines.push('');
+  
+  // VIII. Readiness & Posture
+  lines.push(headers.readinessPosture);
+  lines.push('');
+  const readiness = _assessReadiness(executionData, aggregated);
+  const readinessLabel = language === 'fr' ? 'Préparation' : 'Readiness';
+  const causeLabel = language === 'fr' ? 'Cause principale' : 'Primary cause';
+  const causeMap = {
+    'Load': language === 'fr' ? 'Charge' : 'Load',
+    'Environment': language === 'fr' ? 'Environnement' : 'Environment',
+    'Internal': language === 'fr' ? 'Interne' : 'Internal',
+    'Unknown': language === 'fr' ? 'Inconnue' : 'Unknown'
+  };
+  const levelMap = {
+    'High': language === 'fr' ? 'Élevée' : 'High',
+    'Medium': language === 'fr' ? 'Moyenne' : 'Medium',
+    'Degraded': language === 'fr' ? 'Dégradée' : 'Degraded'
+  };
+  lines.push(readinessLabel + ': ' + levelMap[readiness.level] + '. ' + causeLabel + ': ' + causeMap[readiness.cause] + '.');
   lines.push('');
   
-  // Readiness & Posture
-  lines.push('Readiness & Posture');
+  // IX. Forward Tension (Not Decisions)
+  lines.push(headers.forwardTension);
   lines.push('');
-  const readiness = _assessReadiness(executionData, surfaceA);
-  lines.push('Readiness: ' + readiness.level + '. Cause: ' + readiness.cause + '.');
-  lines.push('');
-  lines.push('');
-  
-  // Forward Tension
-  lines.push('Forward Tension');
-  lines.push('');
-  const tensions = _identifyForwardTension(executionData, projects);
+  const tensions = _identifyForwardTension(executionData, projects, emerging, language);
   if (tensions.length > 0) {
     for (const tension of tensions) {
       lines.push(tension + '.');
     }
   } else {
-    lines.push('None identified.');
+    const none = language === 'fr' ? 'Aucune tension identifiée.' : 'None identified.';
+    lines.push(none);
   }
   lines.push('');
-  lines.push('');
   
-  // Closing Statement
-  lines.push('Closing Statement');
+  // X. Closing Line (M / Moneypenny Tone)
+  lines.push(headers.closingLine);
   lines.push('');
-  const closing = _generateClosingStatement(executionData, surfaceA);
+  const closing = _generateClosingLine(executionData, aggregated, language);
   lines.push(closing);
   lines.push('');
 
   return lines.join('\n');
 }
 
-function _readWeeklySurfaceA() {
-  const sheet = _getSheet('SURFACE_A');
-  if (!sheet) {
-    return null;
-  }
-  const data = sheet.getDataRange().getValues();
-  if (data.length === 0) {
-    return null;
-  }
-  
-  const keyValueMap = {};
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i];
-    if (row.length >= 2) {
-      const key = String(row[0] || '').trim();
-      const value = row[1];
-      if (key) {
-        keyValueMap[key] = value;
-      }
-    }
-  }
-  
-  if (keyValueMap['last_run_status'] !== 'SUCCESS') {
-    return null;
+// ================== HEADERS ==================
+function _getWeeklyHeaders(language) {
+  if (language === 'fr') {
+    return {
+      operatingReality: 'I. Réalité Opérationnelle',
+      attentionLoad: 'II. Attention et Charge',
+      movementFriction: 'III. Mouvement et Friction',
+      leverageDependencies: 'IV. Levier et Dépendances',
+      signals: 'V. Signaux (DÉRIVÉS)',
+      externalContext: 'VI. Contexte Externe',
+      decidedCommitments: 'VII. Engagements DÉCIDÉS',
+      readinessPosture: 'VIII. Préparation et Posture',
+      forwardTension: 'IX. Tension Avant',
+      closingLine: 'X. Ligne de Clôture'
+    };
   }
   
   return {
-    orientation: keyValueMap['orientation'] ? String(keyValueMap['orientation']).trim() : '',
-    framing: keyValueMap['framing'] ? String(keyValueMap['framing']).trim() : '',
-    attention: keyValueMap['attention'] ? String(keyValueMap['attention']).trim() : '',
-    context: keyValueMap['context'] ? String(keyValueMap['context']).trim() : ''
+    operatingReality: 'I. Operating Reality',
+    attentionLoad: 'II. Attention & Load',
+    movementFriction: 'III. Movement & Friction',
+    leverageDependencies: 'IV. Leverage & Dependencies',
+    signals: 'V. Signals (DERIVED)',
+    externalContext: 'VI. External Context',
+    decidedCommitments: 'VII. DECIDED Commitments',
+    readinessPosture: 'VIII. Readiness & Posture',
+    forwardTension: 'IX. Forward Tension',
+    closingLine: 'X. Closing Line'
   };
+}
+
+// ================== ARCHIVE AGGREGATION ==================
+function _aggregateArchiveData(archiveRows) {
+  // Archive columns: archived_at, run_id, orientation, attention, context, framing, reflection, constraints
+  const aggregated = {
+    orientation: [],
+    attention: [],
+    context: [],
+    framing: []
+  };
+  
+  for (const row of archiveRows) {
+    if (row.length > 2) {
+      const orientation = String(row[2] || '').trim();
+      const attention = String(row[3] || '').trim();
+      const context = String(row[4] || '').trim();
+      const framing = String(row[5] || '').trim();
+      
+      if (orientation) aggregated.orientation.push(orientation);
+      if (attention) aggregated.attention.push(attention);
+      if (context) aggregated.context.push(context);
+      if (framing) aggregated.framing.push(framing);
+    }
+  }
+  
+  return {
+    orientation: aggregated.orientation.join(' | '),
+    attention: aggregated.attention.join(' | '),
+    context: aggregated.context.join(' | '),
+    framing: aggregated.framing.join(' | ')
+  };
+}
+
+// ================== SYNTHESIS FUNCTIONS ==================
+function _synthesizeOperatingReality(orientation, framing, language) {
+  const parts = [];
+  if (orientation) parts.push(orientation);
+  if (framing) parts.push(framing);
+  
+  if (parts.length === 0) {
+    return language === 'fr' 
+      ? 'Aucune orientation opérationnelle enregistrée cette semaine.'
+      : 'No operational orientation recorded this week.';
+  }
+  
+  // Synthesize into one sentence describing what the week was about
+  const combined = parts.join(' ').trim();
+  // Extract key phrases and create a synthesis
+  const sentences = combined.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+  
+  if (sentences.length === 0) {
+    return language === 'fr'
+      ? 'La semaine était principalement orientée autour d\'activités opérationnelles.'
+      : 'The week was primarily oriented around operational activities.';
+  }
+  
+  // Use first complete sentence, or synthesize
+  const firstSentence = sentences[0];
+  if (firstSentence.length > 20) {
+    return firstSentence + '.';
+  }
+  
+  // Fallback synthesis
+  return language === 'fr'
+    ? 'La semaine était principalement orientée autour d\'activités opérationnelles.'
+    : 'The week was primarily oriented around operational activities.';
+}
+
+function _synthesizeAttentionLoad(attention, executionData, language) {
+  const parts = [];
+  
+  if (attention && attention.trim()) {
+    parts.push(attention.trim());
+  }
+  
+  if (executionData.openCount > executionData.completedCount) {
+    const loadText = language === 'fr'
+      ? 'La charge d\'exécution a dépassé la complétion.'
+      : 'Execution load exceeded completion.';
+    parts.push(loadText);
+  }
+  
+  if (parts.length === 0) {
+    return language === 'fr'
+      ? 'Aucune pression notable observée.'
+      : 'No notable pressure observed.';
+  }
+  
+  return parts.join(' ');
+}
+
+function _synthesizeMovementFriction(executionData, language) {
+  const movementParts = [];
+  const frictionParts = [];
+  
+  if (executionData.completedCount > 0) {
+    const movement = language === 'fr'
+      ? 'Progrès enregistré dans l\'exécution de routine.'
+      : 'Progress occurred in routine execution.';
+    movementParts.push(movement);
+  }
+  
+  if (executionData.agingCount > 0 || executionData.carriedCount > 0) {
+    const friction = language === 'fr'
+      ? 'Report répété observé dans les éléments liés à la planification.'
+      : 'Repeated deferral observed in planning-related items.';
+    frictionParts.push(friction);
+  }
+  
+  const result = [];
+  if (movementParts.length > 0) {
+    result.push('Movement: ' + movementParts.join(' '));
+  } else {
+    result.push(language === 'fr' ? 'Mouvement: aucun enregistré.' : 'Movement: none recorded.');
+  }
+  
+  if (frictionParts.length > 0) {
+    result.push('Friction: ' + frictionParts.join(' '));
+  } else {
+    result.push(language === 'fr' ? 'Friction: aucune enregistrée.' : 'Friction: none recorded.');
+  }
+  
+  return result.join(' ');
+}
+
+function _synthesizeLeverage(projects, executionData, language) {
+  const projectTasks = executionData.projectLinkedTasks || 0;
+  
+  if (projects.length === 0 && projectTasks === 0) {
+    return language === 'fr'
+      ? 'Aucune nouvelle relation de levier n\'a été activée.'
+      : 'No new leverage relationships were activated.';
+  }
+  
+  const parts = [];
+  if (projects.length > 0) {
+    const projText = language === 'fr'
+      ? projects.length + ' projet(s) actif(s)'
+      : projects.length + ' active project' + (projects.length !== 1 ? 's' : '');
+    parts.push(projText);
+  }
+  if (projectTasks > 0) {
+    const taskText = language === 'fr'
+      ? projectTasks + ' tâche(s) liée(s) au projet'
+      : projectTasks + ' project-linked task' + (projectTasks !== 1 ? 's' : '');
+    parts.push(taskText);
+  }
+  
+  return language === 'fr'
+    ? 'Levier: ' + parts.join('. ') + '.'
+    : 'Leverage: ' + parts.join('. ') + '.';
 }
 
 function _readExecutionData() {
@@ -494,44 +685,81 @@ function _getCollapsedSignals(allSignals, eligibleSignals) {
   return [];
 }
 
-function _assessReadiness(executionData, surfaceA) {
+function _assessReadiness(executionData, aggregated) {
   if (executionData.agingCount > 5 || executionData.openCount > 15) {
     return { level: 'Degraded', cause: 'Load' };
   }
   if (executionData.openCount > 8) {
     return { level: 'Medium', cause: 'Load' };
   }
-  if (surfaceA && surfaceA.context) {
+  if (aggregated && aggregated.context) {
     return { level: 'Medium', cause: 'Environment' };
   }
   return { level: 'High', cause: 'Unknown' };
 }
 
-function _identifyForwardTension(executionData, projects) {
+function _identifyForwardTension(executionData, projects, emerging, language) {
   const tensions = [];
+  
   if (executionData.agingCount > 0) {
-    tensions.push(executionData.agingCount + ' aging task' + (executionData.agingCount !== 1 ? 's' : '') + ' approaching');
+    const tension = language === 'fr'
+      ? 'Retard dans l\'alignement financier peut forcer un choix dans les semaines à venir'
+      : 'Delay in financial alignment may force a choice within weeks.';
+    tensions.push(tension);
   }
+  
+  if (emerging && emerging.length > 0) {
+    const tension = language === 'fr'
+      ? 'Signaux émergents nécessitent une attention continue'
+      : 'Emerging signals require continued attention.';
+    tensions.push(tension);
+  }
+  
   if (executionData.openCount > 10) {
-    tensions.push('Open task count: ' + executionData.openCount);
+    const tension = language === 'fr'
+      ? 'Accumulation de tâches ouvertes approchant le seuil de gestion'
+      : 'Open task accumulation approaching management threshold.';
+    tensions.push(tension);
   }
-  if (projects.length > 0 && executionData.projectLinkedTasks === 0) {
-    tensions.push('Projects active but no project-linked tasks');
-  }
+  
   return tensions;
 }
 
-function _generateClosingStatement(executionData, surfaceA) {
-  if (executionData.completedCount > 0 && executionData.carriedCount === 0) {
-    return 'All tasks completed. No carryover.';
+function _generateClosingLine(executionData, aggregated, language) {
+  // M / Moneypenny tone: dry, slightly ironic, no comfort, no urgency, no instruction
+  const closingLines = language === 'fr' ? [
+    'La pression est présente; l\'optionalité demeure.',
+    'La situation est stable, sinon encore élégante.',
+    'Tous les actifs sont comptabilisés; l\'intention se forme encore.',
+    'Rien ne brûle, mais plusieurs allumettes sont visibles.',
+    'Le système fonctionne; l\'efficacité reste à déterminer.',
+    'Rien d\'irréparable. Rien de résolu.',
+    'Les pièces sont en place. Le plateau, lui, reste à découvrir.'
+  ] : [
+    'Pressure is present; optionality remains.',
+    'The situation is stable, if not yet elegant.',
+    'All assets accounted for; intent still forming.',
+    'Nothing is on fire, but several matches are visible.',
+    'The system functions; efficiency remains to be determined.',
+    'Nothing irreparable. Nothing resolved.',
+    'The pieces are in place. The board, however, remains to be discovered.'
+  ];
+  
+  // Select based on context (deterministic)
+  let index = 0;
+  if (executionData.openCount > 10) {
+    index = 0; // Pressure and optionality
+  } else if (executionData.completedCount > 0 && executionData.carriedCount === 0) {
+    index = 1; // Stable but not elegant
+  } else if (executionData.agingCount > 0) {
+    index = 3; // Matches visible
+  } else if (aggregated && (aggregated.orientation || aggregated.framing)) {
+    index = 2; // Assets accounted, intent forming
+  } else {
+    index = 5; // Nothing irreparable
   }
-  if (executionData.carriedCount > executionData.completedCount) {
-    return 'More tasks carried than completed.';
-  }
-  if (executionData.completedCount > 0) {
-    return 'Some movement recorded.';
-  }
-  return 'No movement recorded this week.';
+  
+  return closingLines[index % closingLines.length];
 }
 
 // ================== WRITE OUTPUT ==================

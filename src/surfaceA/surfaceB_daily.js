@@ -221,6 +221,96 @@ function _getSectionHeaders(language) {
   };
 }
 
+// ================== WIT HELPERS ==================
+function _addSubtleWit(surfaceA, openTasks, language, section) {
+  // Maximum 1 witty line per brief, only in Observations or Closing Note
+  // Wit must be dry, understated, observational, never distorting facts
+  // Tone: observant, restrained, amused but professional, slightly teasing
+  
+  if (section !== 'observations' && section !== 'closing') {
+    return '';
+  }
+  
+  const taskCount = openTasks ? openTasks.length : 0;
+  const hasPressure = surfaceA && surfaceA.attention && 
+    /\b(pressure|stress|overwhelm|urgent|rush|busy|load|heavy|pression|charge|urgent|occupé)\b/i.test(surfaceA.attention);
+  const hasActivity = surfaceA && (surfaceA.orientation || surfaceA.context);
+  const hasPendingTasks = taskCount > 0;
+  
+  if (section === 'observations') {
+    // One subtle remark allowed in Observations (dry, understated, observational)
+    const observationsWit = language === 'fr' ? [
+      'Rien d\'alarmant. Ce qui, dans ce contexte, mérite d\'être noté.',
+      'Activité soutenue. Le rendement, quant à lui, se fait désirer.',
+      'Les intentions sont claires. Leur exécution, moins ponctuelle.',
+      'Progrès observés. Résultat attendu toujours en transit.',
+      'La situation évolue. Pas nécessairement dans la direction prévue.'
+    ] : [
+      'Nothing alarming. Which, in this context, is worth noting.',
+      'Activity sustained. Output, however, remains elusive.',
+      'Intentions are clear. Their execution, less punctual.',
+      'Progress observed. Expected results still in transit.',
+      'The situation evolves. Not necessarily in the anticipated direction.'
+    ];
+    
+    // Select based on context (deterministic)
+    let index = 0;
+    if (hasPendingTasks && hasActivity) {
+      index = 2; // Execution vs intention
+    } else if (hasPressure) {
+      index = 1; // Activity vs output
+    } else if (hasActivity) {
+      index = 3; // Progress vs results
+    } else {
+      index = 0; // Nothing alarming
+    }
+    
+    return observationsWit[index % observationsWit.length];
+  }
+  
+  if (section === 'closing') {
+    // Closing Note: one sentence, truthful, may contain restrained wit
+    // Dry, understated, slightly teasing but never flippant
+    const closingWit = language === 'fr' ? [
+      'La pression est présente. Le levier semble apprécier le suspense.',
+      'Clarté en formation. Exécution, quant à elle, prend son temps.',
+      'Rien d\'irréparable. Rien de résolu.',
+      'Les pièces sont en place. Le plateau, lui, reste à découvrir.',
+      'La journée se déroulera comme elle se déroulera.',
+      'Tout plutôt simple, plus ou moins.',
+      'Progrès observés. Résultat attendu toujours en transit.',
+      'La situation évolue. Pas nécessairement dans la direction prévue.'
+    ] : [
+      'Pressure is present. Leverage appears to appreciate the suspense.',
+      'Clarity forming. Execution, however, takes its time.',
+      'Nothing irreparable. Nothing resolved.',
+      'The pieces are in place. The board, however, remains to be discovered.',
+      'The day proceeds as it will.',
+      'All rather straightforward, more or less.',
+      'Progress observed. Expected results still in transit.',
+      'The situation evolves. Not necessarily in the anticipated direction.'
+    ];
+    
+    // Select based on context (deterministic)
+    let index = 0;
+    if (hasPendingTasks && hasPressure) {
+      index = 0; // Pressure and leverage
+    } else if (hasActivity && hasPendingTasks) {
+      index = 1; // Clarity vs execution
+    } else if (hasPendingTasks) {
+      index = 3; // Pieces in place
+    } else if (hasActivity) {
+      index = 6; // Progress observed
+    } else {
+      index = 2; // Nothing irreparable
+    }
+    
+    return closingWit[index % closingWit.length];
+  }
+  
+  return '';
+}
+
 // ================== REWRITING HELPERS ==================
 function _isCompleteSentence(text) {
   if (!text || !text.trim()) {
@@ -496,18 +586,38 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
 
   // Observations
   // Tone: This is where Money-Penny lives most naturally. Wry phrasing encouraged, but still factual.
+  // Optional subtle wit allowed here (maximum 1 line).
   if (surfaceA) {
     const reflectionText = surfaceA.reflection ? String(surfaceA.reflection).trim() : '';
-    if (reflectionText) {
-      const sentences = _extractCompleteSentences(reflectionText);
-      const rewritten = _rewriteWithAuthority(sentences, 1, language);
+    const hasReflection = reflectionText && _extractCompleteSentences(reflectionText).length > 0;
+    
+    // Always include Observations section if there's any content or context
+    const hasAnyContent = hasReflection || (surfaceA.orientation || surfaceA.attention || surfaceA.context);
+    
+    if (hasAnyContent) {
+      lines.push(headers.observations);
+      lines.push('');
       
-      if (rewritten && rewritten.trim()) {
-        lines.push(headers.observations);
-        lines.push('');
-        lines.push(rewritten);
-        lines.push('');
+      if (hasReflection) {
+        const sentences = _extractCompleteSentences(reflectionText);
+        const rewritten = _rewriteWithAuthority(sentences, 1, language);
+        if (rewritten && rewritten.trim()) {
+          lines.push(rewritten);
+        }
       }
+      
+      // Add subtle wit (dry, understated, observational)
+      // Only if we have enough context to make it meaningful
+      // Maximum 1 witty line per brief - use in Observations OR Closing Note, not both
+      if (hasAnyContent && !hasReflection) {
+        // If no reflection content, use wit as the observation
+        const wit = _addSubtleWit(surfaceA, openTasks, language, 'observations');
+        if (wit) {
+          lines.push(wit);
+        }
+      }
+      
+      lines.push('');
     }
   }
 
@@ -597,26 +707,12 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
 
   // Closing Note
   // Tone: One sentence. Can be witty. Must still be true. No reassurance.
-  const closingNotes = language === 'fr' ? [
-    'La pression est présente; le levier reste indécis.',
-    'La clarté se forme plus vite que l\'exécution.',
-    'Rien d\'irréparable. Rien de résolu.',
-    'La journée se déroulera comme elle se déroulera.',
-    'Tout plutôt simple, plus ou moins.'
-  ] : [
-    'Pressure is present; leverage remains undecided.',
-    'Clarity is forming faster than execution.',
-    'Nothing irreparable. Nothing resolved.',
-    'The day proceeds as it will.',
-    'All rather straightforward, more or less.'
-  ];
-  const taskCount = openTasks ? openTasks.length : 0;
-  const hasSurfaceA = surfaceA && (surfaceA.orientation || surfaceA.attention || surfaceA.context);
-  const noteIndex = (taskCount + (hasSurfaceA ? 1 : 0)) % closingNotes.length;
+  // Restrained wit allowed here (dry, understated, observational).
+  const closingNote = _addSubtleWit(surfaceA, openTasks, language, 'closing');
   
   lines.push(headers.closingNote);
   lines.push('');
-  lines.push(closingNotes[noteIndex]);
+  lines.push(closingNote);
 
   return lines.join('\n');
 }

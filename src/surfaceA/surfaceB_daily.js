@@ -143,10 +143,44 @@ function _readActiveDerivedSignals() {
 }
 
 
+// ================== LANGUAGE DETECTION ==================
+function _detectLanguage(surfaceA) {
+  if (!surfaceA) {
+    return 'en';
+  }
+  
+  // Sample text from Surface A fields
+  const sampleText = [
+    surfaceA.orientation || '',
+    surfaceA.attention || '',
+    surfaceA.context || '',
+    surfaceA.framing || '',
+    surfaceA.reflection || ''
+  ].join(' ').trim();
+  
+  if (!sampleText) {
+    return 'en';
+  }
+  
+  // Simple heuristic: check for French indicators
+  const frenchIndicators = /\b(le|la|les|de|du|des|un|une|et|ou|dans|sur|avec|pour|par|est|sont|était|étaient|être|avoir|fait|faire)\b/i;
+  const hasFrench = frenchIndicators.test(sampleText);
+  
+  // Check for French-specific characters/patterns
+  const frenchChars = /[àâäéèêëïîôùûüÿç]/i;
+  const hasFrenchChars = frenchChars.test(sampleText);
+  
+  if (hasFrench || hasFrenchChars) {
+    return 'fr';
+  }
+  
+  return 'en';
+}
+
 // ================== DATE FORMATTING ==================
-function _formatDateHeader(dateValue) {
+function _formatDateHeader(dateValue, language) {
   if (!dateValue) {
-    return 'Today';
+    return language === 'fr' ? "Aujourd'hui" : 'Today';
   }
 
   let date;
@@ -155,12 +189,36 @@ function _formatDateHeader(dateValue) {
   } else {
     date = new Date(dateValue);
     if (isNaN(date.getTime())) {
-      return 'Today';
+      return language === 'fr' ? "Aujourd'hui" : 'Today';
     }
   }
 
+  const locale = language === 'fr' ? 'fr-FR' : 'en-US';
   const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-  return date.toLocaleDateString('en-US', options);
+  return date.toLocaleDateString(locale, options);
+}
+
+// ================== SECTION HEADERS ==================
+function _getSectionHeaders(language) {
+  if (language === 'fr') {
+    return {
+      operationalOrientation: 'Orientation Opérationnelle',
+      attentionLoad: 'Attention et Charge',
+      situationalContext: 'Contexte Situationnel',
+      observations: 'Observations',
+      operationalActions: 'Actions Opérationnelles en Attente',
+      closingNote: 'Note de Clôture'
+    };
+  }
+  
+  return {
+    operationalOrientation: 'Operational Orientation',
+    attentionLoad: 'Attention & Load',
+    situationalContext: 'Situational Context',
+    observations: 'Observations',
+    operationalActions: 'Operational Actions Outstanding',
+    closingNote: 'Closing Note'
+  };
 }
 
 // ================== REWRITING HELPERS ==================
@@ -257,7 +315,7 @@ function _removeRepetition(sentences) {
   return unique;
 }
 
-function _rewriteWithAuthority(sentences, maxSentences) {
+function _rewriteWithAuthority(sentences, maxSentences, language) {
   if (!sentences || sentences.length === 0) {
     return '';
   }
@@ -276,6 +334,8 @@ function _rewriteWithAuthority(sentences, maxSentences) {
     return '';
   }
   
+  // LANGUAGE LOCK: Ensure output matches detected language
+  // (Surface A should already be in correct language, but verify)
   return cleaned.join(' ');
 }
 
@@ -367,22 +427,21 @@ function _cleanTaskContent(content) {
 // ================== COMPOSE BRIEF ==================
 function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
   const lines = [];
+  
+  // LANGUAGE LOCK (CRITICAL): Detect language from Surface A
+  const language = _detectLanguage(surfaceA);
+  const headers = _getSectionHeaders(language);
 
-  // Header: Date only
-  let dateHeader = 'Today';
+  // Header: Date only (in detected language)
+  let dateHeader = language === 'fr' ? "Aujourd'hui" : 'Today';
   if (surfaceA && surfaceA.generated_at) {
-    const date = surfaceA.generated_at instanceof Date 
-      ? surfaceA.generated_at 
-      : new Date(surfaceA.generated_at);
-    if (!isNaN(date.getTime())) {
-      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-      dateHeader = date.toLocaleDateString('en-US', options);
-    }
+    dateHeader = _formatDateHeader(surfaceA.generated_at, language);
   }
   lines.push(dateHeader);
   lines.push('');
 
   // Operational Orientation
+  // Tone: Calm briefing tone. One light remark allowed (understatement, raised eyebrow energy).
   if (surfaceA) {
     const orientationText = surfaceA.orientation ? String(surfaceA.orientation).trim() : '';
     const framingText = surfaceA.framing ? String(surfaceA.framing).trim() : '';
@@ -390,10 +449,10 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
     if (orientationText || framingText) {
       const combined = [orientationText, framingText].filter(Boolean).join(' ');
       const sentences = _extractCompleteSentences(combined);
-      const rewritten = _rewriteWithAuthority(sentences, 2);
+      const rewritten = _rewriteWithAuthority(sentences, 2, language);
       
       if (rewritten && rewritten.trim()) {
-        lines.push('Operational Orientation');
+        lines.push(headers.operationalOrientation);
         lines.push('');
         lines.push(rewritten);
         lines.push('');
@@ -402,14 +461,15 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
   }
 
   // Attention & Load
+  // Tone: Slight irony allowed if pressure is evident. No jokes about exhaustion or failure.
   if (surfaceA) {
     const attentionText = surfaceA.attention ? String(surfaceA.attention).trim() : '';
     if (attentionText) {
       const sentences = _extractCompleteSentences(attentionText);
-      const rewritten = _rewriteWithAuthority(sentences, 1);
+      const rewritten = _rewriteWithAuthority(sentences, 1, language);
       
       if (rewritten && rewritten.trim()) {
-        lines.push('Attention & Load');
+        lines.push(headers.attentionLoad);
         lines.push('');
         lines.push(rewritten);
         lines.push('');
@@ -418,14 +478,15 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
   }
 
   // Situational Context
+  // Tone: Strictly factual. Humor optional, very light.
   if (surfaceA) {
     const contextText = surfaceA.context ? String(surfaceA.context).trim() : '';
     if (contextText) {
       const sentences = _extractCompleteSentences(contextText);
-      const rewritten = _rewriteWithAuthority(sentences, 2);
+      const rewritten = _rewriteWithAuthority(sentences, 2, language);
       
       if (rewritten && rewritten.trim()) {
-        lines.push('Situational Context');
+        lines.push(headers.situationalContext);
         lines.push('');
         lines.push(rewritten);
         lines.push('');
@@ -434,14 +495,15 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
   }
 
   // Observations
+  // Tone: This is where Money-Penny lives most naturally. Wry phrasing encouraged, but still factual.
   if (surfaceA) {
     const reflectionText = surfaceA.reflection ? String(surfaceA.reflection).trim() : '';
     if (reflectionText) {
       const sentences = _extractCompleteSentences(reflectionText);
-      const rewritten = _rewriteWithAuthority(sentences, 1);
+      const rewritten = _rewriteWithAuthority(sentences, 1, language);
       
       if (rewritten && rewritten.trim()) {
-        lines.push('Observations');
+        lines.push(headers.observations);
         lines.push('');
         lines.push(rewritten);
         lines.push('');
@@ -456,7 +518,7 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
                         grouped.system.length > 0 || grouped.other.length > 0;
     
     if (hasAnyTasks) {
-      lines.push('Operational Actions Outstanding');
+      lines.push(headers.operationalActions);
       lines.push('');
       
       // Remove duplicates by content
@@ -473,8 +535,13 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
       // Group and format
       const uniqueGrouped = _groupTasksByType(uniqueTasks);
       
+      // Operational Actions Outstanding
+      // Tone: Clear, explicit, no jokes inside task text. A single dry remark may appear before or after the list.
       if (uniqueGrouped.domestic.length > 0) {
-        lines.push('Domestic maintenance remains pending.');
+        const remark = language === 'fr' 
+          ? 'Maintenance domestique en attente.'
+          : 'Domestic maintenance remains pending.';
+        lines.push(remark);
         for (const task of uniqueGrouped.domestic) {
           const cleaned = _cleanTaskContent(task.content);
           if (cleaned) {
@@ -486,7 +553,10 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
       
       if (uniqueGrouped.operational.length > 0) {
         if (uniqueGrouped.domestic.length === 0) {
-          lines.push('Operational items require attention.');
+          const remark = language === 'fr'
+            ? 'Éléments opérationnels nécessitant attention.'
+            : 'Operational items require attention.';
+          lines.push(remark);
         }
         for (const task of uniqueGrouped.operational) {
           const cleaned = _cleanTaskContent(task.content);
@@ -499,7 +569,10 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
       
       if (uniqueGrouped.system.length > 0) {
         if (uniqueGrouped.domestic.length === 0 && uniqueGrouped.operational.length === 0) {
-          lines.push('System maintenance pending.');
+          const remark = language === 'fr'
+            ? 'Maintenance système en attente.'
+            : 'System maintenance pending.';
+          lines.push(remark);
         }
         for (const task of uniqueGrouped.system) {
           const cleaned = _cleanTaskContent(task.content);
@@ -523,7 +596,14 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
   }
 
   // Closing Note
-  const closingNotes = [
+  // Tone: One sentence. Can be witty. Must still be true. No reassurance.
+  const closingNotes = language === 'fr' ? [
+    'La pression est présente; le levier reste indécis.',
+    'La clarté se forme plus vite que l\'exécution.',
+    'Rien d\'irréparable. Rien de résolu.',
+    'La journée se déroulera comme elle se déroulera.',
+    'Tout plutôt simple, plus ou moins.'
+  ] : [
     'Pressure is present; leverage remains undecided.',
     'Clarity is forming faster than execution.',
     'Nothing irreparable. Nothing resolved.',
@@ -534,7 +614,7 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
   const hasSurfaceA = surfaceA && (surfaceA.orientation || surfaceA.attention || surfaceA.context);
   const noteIndex = (taskCount + (hasSurfaceA ? 1 : 0)) % closingNotes.length;
   
-  lines.push('Closing Note');
+  lines.push(headers.closingNote);
   lines.push('');
   lines.push(closingNotes[noteIndex]);
 

@@ -39,6 +39,31 @@ const STATUS_DONE = 'done';
 const STATUS_DELETED = 'deleted';
 const STATUS_CANCELED = 'canceled'; // Legacy support
 
+// ================== CLARIFY OPTIONS ==================
+const CLARIFY_CLASSIFICATIONS = [
+  'Action',
+  'Decision',
+  'Experiment',
+  'Product idea',
+  'Sales insight',
+  'Strategy insight',
+  'Public Pipeline',
+  'MSP Pipeline',
+  'Product & Intelligence',
+  'Founder OS',
+  'Archive / No action'
+];
+
+const CLARIFY_BUSINESS_LOOPS = [
+  'Public',
+  'MSP',
+  'Product',
+  'Intelligence',
+  'Founder',
+  'Admin',
+  'Archive'
+];
+
 // ================== INITIALIZATION ==================
 function _initInboxSheet() {
   const sheet = _getOrCreateSheet(EXECUTION_TAB_INBOX);
@@ -55,7 +80,18 @@ function _initInboxSheet() {
     'content',
     'capture_mode',
     'source',
-    'notes'
+    'notes',
+    // Clarify fields (additive, legacy-safe defaults)
+    'classification',
+    'business_loop',
+    'next_action',
+    'urgency',
+    'effort',
+    'leverage_score',
+    'priority_label',
+    'stale_after',
+    'promoted_to',
+    'last_reviewed_at'
   ];
 
   sheet.getRange(1, 1, 1, header.length).setValues([header]);
@@ -89,7 +125,18 @@ function _initExecutionSheet() {
     'notes',
     'status',
     'due_date',
-    'decided_id'
+    'decided_id',
+    // Clarify fields copied from inbox when available
+    'classification',
+    'business_loop',
+    'next_action',
+    'urgency',
+    'effort',
+    'leverage_score',
+    'priority_label',
+    'stale_after',
+    'promoted_to',
+    'last_reviewed_at'
   ];
 
   sheet.getRange(1, 1, 1, header.length).setValues([header]);
@@ -119,7 +166,8 @@ function initExecutionSheet() {
 
 // ================== INBOX OPERATIONS ==================
 function createInboxItem(content) {
-  if (!content || typeof content !== 'string' || !content.trim()) {
+  const input = _normalizeInboxInput(content);
+  if (!input.content) {
     throw new Error('Content is required');
   }
   
@@ -138,10 +186,21 @@ function createInboxItem(content) {
   const row = [
     inboxId,
     now,
-    content.trim(),
+    input.content,
     'text',
-    'mobile_capture',
-    ''
+    input.capture_mode,
+    input.source,
+    input.notes,
+    input.classification,
+    input.business_loop,
+    input.next_action,
+    input.urgency,
+    input.effort,
+    input.leverage_score,
+    input.priority_label,
+    input.stale_after,
+    input.promoted_to,
+    input.last_reviewed_at
   ];
   
   sheet.appendRow(row);
@@ -162,6 +221,18 @@ function promoteInboxToTask(inbox_id, options) {
   const idIdx = headerRow.indexOf('inbox_id');
   const contentIdx = headerRow.indexOf('content');
   const captureModeIdx = headerRow.indexOf('capture_mode');
+  const sourceIdx = headerRow.indexOf('source');
+  const notesIdx = headerRow.indexOf('notes');
+  const classificationIdx = headerRow.indexOf('classification');
+  const businessLoopIdx = headerRow.indexOf('business_loop');
+  const nextActionIdx = headerRow.indexOf('next_action');
+  const urgencyIdx = headerRow.indexOf('urgency');
+  const effortIdx = headerRow.indexOf('effort');
+  const leverageScoreIdx = headerRow.indexOf('leverage_score');
+  const priorityLabelIdx = headerRow.indexOf('priority_label');
+  const staleAfterIdx = headerRow.indexOf('stale_after');
+  const promotedToIdx = headerRow.indexOf('promoted_to');
+  const lastReviewedAtIdx = headerRow.indexOf('last_reviewed_at');
 
   if (idIdx === -1 || contentIdx === -1) {
     throw new Error('Invalid EXECUTION_INBOX sheet structure');
@@ -174,7 +245,19 @@ function promoteInboxToTask(inbox_id, options) {
       inboxItem = {
         inbox_id: String(data[i][idIdx]).trim(),
         content: data[i][contentIdx],
-        capture_mode: captureModeIdx >= 0 ? String(data[i][captureModeIdx] || '').trim() : 'text'
+        capture_mode: captureModeIdx >= 0 ? String(data[i][captureModeIdx] || '').trim() : 'text',
+        source: sourceIdx >= 0 ? String(data[i][sourceIdx] || '').trim() : 'mobile_capture',
+        notes: notesIdx >= 0 ? String(data[i][notesIdx] || '').trim() : '',
+        classification: classificationIdx >= 0 ? String(data[i][classificationIdx] || '').trim() : '',
+        business_loop: businessLoopIdx >= 0 ? String(data[i][businessLoopIdx] || '').trim() : '',
+        next_action: nextActionIdx >= 0 ? String(data[i][nextActionIdx] || '').trim() : '',
+        urgency: urgencyIdx >= 0 ? Number(data[i][urgencyIdx]) : 3,
+        effort: effortIdx >= 0 ? Number(data[i][effortIdx]) : 3,
+        leverage_score: leverageScoreIdx >= 0 ? Number(data[i][leverageScoreIdx]) : null,
+        priority_label: priorityLabelIdx >= 0 ? String(data[i][priorityLabelIdx] || '').trim() : '',
+        stale_after: staleAfterIdx >= 0 ? data[i][staleAfterIdx] : '',
+        promoted_to: promotedToIdx >= 0 ? String(data[i][promotedToIdx] || '').trim() : '',
+        last_reviewed_at: lastReviewedAtIdx >= 0 ? data[i][lastReviewedAtIdx] : ''
       };
       break;
     }
@@ -184,14 +267,44 @@ function promoteInboxToTask(inbox_id, options) {
     throw new Error('Inbox item not found: ' + inbox_id);
   }
 
+  const clarify = _normalizeClarifyFields({
+    classification: options.classification || inboxItem.classification,
+    business_loop: options.business_loop || inboxItem.business_loop,
+    next_action: options.next_action || inboxItem.next_action,
+    urgency: options.urgency !== undefined ? options.urgency : inboxItem.urgency,
+    effort: options.effort !== undefined ? options.effort : inboxItem.effort,
+    leverage_score: options.leverage_score !== undefined ? options.leverage_score : inboxItem.leverage_score,
+    priority_label: options.priority_label || inboxItem.priority_label,
+    stale_after: options.stale_after || inboxItem.stale_after,
+    promoted_to: options.promoted_to || inboxItem.promoted_to,
+    last_reviewed_at: options.last_reviewed_at || inboxItem.last_reviewed_at
+  });
+
+  const canCreateTask = _canPromoteToExecutionTask(clarify);
+  if (!canCreateTask.allowed) {
+    // Legacy-safe behavior: do not delete inbox item when clarify gate blocks promotion.
+    return '';
+  }
+
   // Create task from inbox item
   const taskInput = {
-    content: inboxItem.content,
+    content: clarify.next_action || inboxItem.content,
     origin: 'inbox',
     inbox_id: inboxItem.inbox_id,
     capture_mode: inboxItem.capture_mode,
     project_id: options.project_id || '',
-    write_to_raw: options.write_to_raw || false
+    write_to_raw: options.write_to_raw || false,
+    notes: inboxItem.notes,
+    classification: clarify.classification,
+    business_loop: clarify.business_loop,
+    next_action: clarify.next_action,
+    urgency: clarify.urgency,
+    effort: clarify.effort,
+    leverage_score: clarify.leverage_score,
+    priority_label: clarify.priority_label,
+    stale_after: clarify.stale_after,
+    promoted_to: 'task',
+    last_reviewed_at: new Date()
   };
 
   const taskId = createTask(taskInput);
@@ -251,6 +364,16 @@ function listInboxItems() {
   const captureModeIdx = headerRow.indexOf('capture_mode');
   const sourceIdx = headerRow.indexOf('source');
   const notesIdx = headerRow.indexOf('notes');
+  const classificationIdx = headerRow.indexOf('classification');
+  const businessLoopIdx = headerRow.indexOf('business_loop');
+  const nextActionIdx = headerRow.indexOf('next_action');
+  const urgencyIdx = headerRow.indexOf('urgency');
+  const effortIdx = headerRow.indexOf('effort');
+  const leverageScoreIdx = headerRow.indexOf('leverage_score');
+  const priorityLabelIdx = headerRow.indexOf('priority_label');
+  const staleAfterIdx = headerRow.indexOf('stale_after');
+  const promotedToIdx = headerRow.indexOf('promoted_to');
+  const lastReviewedAtIdx = headerRow.indexOf('last_reviewed_at');
 
   if (idIdx === -1 || contentIdx === -1) {
     return [];
@@ -266,7 +389,17 @@ function listInboxItems() {
       content: row[contentIdx],
       capture_mode: captureModeIdx >= 0 ? String(row[captureModeIdx] || '').trim() : 'text',
       source: sourceIdx >= 0 ? (row[sourceIdx] ? String(row[sourceIdx]).trim() : '') : '',
-      notes: notesIdx >= 0 ? (row[notesIdx] ? String(row[notesIdx]).trim() : '') : ''
+      notes: notesIdx >= 0 ? (row[notesIdx] ? String(row[notesIdx]).trim() : '') : '',
+      classification: classificationIdx >= 0 ? (row[classificationIdx] ? String(row[classificationIdx]).trim() : 'Action') : 'Action',
+      business_loop: businessLoopIdx >= 0 ? (row[businessLoopIdx] ? String(row[businessLoopIdx]).trim() : 'Founder') : 'Founder',
+      next_action: nextActionIdx >= 0 ? (row[nextActionIdx] ? String(row[nextActionIdx]).trim() : '') : '',
+      urgency: urgencyIdx >= 0 && row[urgencyIdx] !== '' ? Number(row[urgencyIdx]) : 3,
+      effort: effortIdx >= 0 && row[effortIdx] !== '' ? Number(row[effortIdx]) : 3,
+      leverage_score: leverageScoreIdx >= 0 && row[leverageScoreIdx] !== '' ? Number(row[leverageScoreIdx]) : 0,
+      priority_label: priorityLabelIdx >= 0 ? (row[priorityLabelIdx] ? String(row[priorityLabelIdx]).trim() : 'Schedule') : 'Schedule',
+      stale_after: staleAfterIdx >= 0 ? (row[staleAfterIdx] || '') : '',
+      promoted_to: promotedToIdx >= 0 ? (row[promotedToIdx] ? String(row[promotedToIdx]).trim() : '') : '',
+      last_reviewed_at: lastReviewedAtIdx >= 0 ? (row[lastReviewedAtIdx] || '') : ''
     });
   }
 
@@ -294,6 +427,7 @@ function createTask(input) {
   const now = new Date();
   const state = STATUS_OPEN;
   const origin = input.origin || (input.inbox_id ? 'inbox' : 'manual');
+  const clarify = _normalizeClarifyFields(input);
 
   const headerRowCreate = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const dueAtIdx = headerRowCreate.indexOf('due_at');
@@ -329,7 +463,17 @@ function createTask(input) {
     input.notes ? String(input.notes).trim() : '', // notes
     state, // status (same as state)
     input.due_date || '', // due_date (deprecated but preserved)
-    input.decided_id ? String(input.decided_id).trim() : '' // decided_id (legacy, maps to project_id if Project)
+    input.decided_id ? String(input.decided_id).trim() : '', // decided_id (legacy, maps to project_id if Project)
+    clarify.classification,
+    clarify.business_loop,
+    clarify.next_action,
+    clarify.urgency,
+    clarify.effort,
+    clarify.leverage_score,
+    clarify.priority_label,
+    clarify.stale_after,
+    clarify.promoted_to,
+    clarify.last_reviewed_at
   ];
   
   if (dueAtIdx >= 0) {
@@ -531,6 +675,16 @@ function setTaskTiming(task_id, options) {
   const headerRow = data[0];
   const idIdx = headerRow.indexOf('task_id');
   const dueAtIdx = headerRow.indexOf('due_at');
+  const classificationIdx = headerRow.indexOf('classification');
+  const businessLoopIdx = headerRow.indexOf('business_loop');
+  const nextActionIdx = headerRow.indexOf('next_action');
+  const urgencyIdx = headerRow.indexOf('urgency');
+  const effortIdx = headerRow.indexOf('effort');
+  const leverageScoreIdx = headerRow.indexOf('leverage_score');
+  const priorityLabelIdx = headerRow.indexOf('priority_label');
+  const staleAfterIdx = headerRow.indexOf('stale_after');
+  const promotedToIdx = headerRow.indexOf('promoted_to');
+  const lastReviewedAtIdx = headerRow.indexOf('last_reviewed_at');
   const dueWindowIdx = headerRow.indexOf('due_window');
   const reminderRuleIdx = headerRow.indexOf('reminder_rule');
 
@@ -805,7 +959,17 @@ function listOpenTasks() {
       notes: notesIdx >= 0 ? (row[notesIdx] ? String(row[notesIdx]).trim() : '') : '',
       decided_id: decidedIdIdx >= 0 ? (row[decidedIdIdx] ? String(row[decidedIdIdx]).trim() : '') : '', // Legacy
       due_at: dueAt,
-      overdue: overdue
+      overdue: overdue,
+      classification: classificationIdx >= 0 ? (row[classificationIdx] ? String(row[classificationIdx]).trim() : 'Action') : 'Action',
+      business_loop: businessLoopIdx >= 0 ? (row[businessLoopIdx] ? String(row[businessLoopIdx]).trim() : 'Founder') : 'Founder',
+      next_action: nextActionIdx >= 0 ? (row[nextActionIdx] ? String(row[nextActionIdx]).trim() : '') : '',
+      urgency: urgencyIdx >= 0 && row[urgencyIdx] !== '' ? Number(row[urgencyIdx]) : 3,
+      effort: effortIdx >= 0 && row[effortIdx] !== '' ? Number(row[effortIdx]) : 3,
+      leverage_score: leverageScoreIdx >= 0 && row[leverageScoreIdx] !== '' ? Number(row[leverageScoreIdx]) : 0,
+      priority_label: priorityLabelIdx >= 0 ? (row[priorityLabelIdx] ? String(row[priorityLabelIdx]).trim() : 'Schedule') : 'Schedule',
+      stale_after: staleAfterIdx >= 0 ? (row[staleAfterIdx] || '') : '',
+      promoted_to: promotedToIdx >= 0 ? (row[promotedToIdx] ? String(row[promotedToIdx]).trim() : '') : '',
+      last_reviewed_at: lastReviewedAtIdx >= 0 ? (row[lastReviewedAtIdx] || '') : ''
     });
   }
 
@@ -922,7 +1086,17 @@ function normalizeExecutionTasksSchema_v1_2() {
     'reminder_rule',
     'last_reminded_at',
     'recurrence_rule',
-    'recurrence_anchor'
+    'recurrence_anchor',
+    'classification',
+    'business_loop',
+    'next_action',
+    'urgency',
+    'effort',
+    'leverage_score',
+    'priority_label',
+    'stale_after',
+    'promoted_to',
+    'last_reviewed_at'
   ];
   
   const existingHeaders = headerRow.map(h => String(h || '').trim());
@@ -989,7 +1163,17 @@ function normalizeExecutionTasksSchema() {
     'notes',
     'status',
     'due_date',
-    'decided_id'
+    'decided_id',
+    'classification',
+    'business_loop',
+    'next_action',
+    'urgency',
+    'effort',
+    'leverage_score',
+    'priority_label',
+    'stale_after',
+    'promoted_to',
+    'last_reviewed_at'
   ];
   
   const headerMap = {};
@@ -1049,6 +1233,19 @@ function normalizeExecutionInboxSchema() {
   
   const headerRow = data[0];
   const canonicalHeaders = ['inbox_id', 'created_at', 'content', 'capture_mode', 'source', 'notes'];
+  const clarifyHeaders = [
+    'classification',
+    'business_loop',
+    'next_action',
+    'urgency',
+    'effort',
+    'leverage_score',
+    'priority_label',
+    'stale_after',
+    'promoted_to',
+    'last_reviewed_at'
+  ];
+  const allCanonicalHeaders = canonicalHeaders.concat(clarifyHeaders);
   
   // Map legacy headers to canonical names
   const headerMap = {};
@@ -1060,7 +1257,7 @@ function normalizeExecutionInboxSchema() {
       headerMap['created_at'] = i;
     } else if (header === 'text' || header === 'note') {
       headerMap['content'] = i;
-    } else if (canonicalHeaders.indexOf(headerRow[i]) !== -1) {
+    } else if (allCanonicalHeaders.indexOf(headerRow[i]) !== -1) {
       headerMap[headerRow[i]] = i;
     }
   }
@@ -1070,8 +1267,8 @@ function normalizeExecutionInboxSchema() {
   const newHeaderRow = [];
   const columnMapping = [];
   
-  for (let i = 0; i < canonicalHeaders.length; i++) {
-    const canonicalHeader = canonicalHeaders[i];
+  for (let i = 0; i < allCanonicalHeaders.length; i++) {
+    const canonicalHeader = allCanonicalHeaders[i];
     if (headerMap.hasOwnProperty(canonicalHeader)) {
       newHeaderRow.push(canonicalHeader);
       columnMapping.push(headerMap[canonicalHeader]);
@@ -1083,9 +1280,9 @@ function normalizeExecutionInboxSchema() {
   }
   
   // If headers need normalization, rebuild the sheet
-  if (missingHeaders.length > 0 || headerRow.length !== canonicalHeaders.length) {
+  if (missingHeaders.length > 0 || headerRow.length !== allCanonicalHeaders.length) {
     const numRows = data.length;
-    const numCols = canonicalHeaders.length;
+    const numCols = allCanonicalHeaders.length;
     
     // Build new data array
     const newData = [newHeaderRow];
@@ -1110,6 +1307,113 @@ function normalizeExecutionInboxSchema() {
       sheet.getRange(1, 1, newData.length, newData[0].length).setValues(newData);
     }
   }
+}
+
+// ================== CLARIFY HELPERS ==================
+function _normalizeInboxInput(contentOrInput) {
+  const rawInput = (typeof contentOrInput === 'string') ? { content: contentOrInput } : (contentOrInput || {});
+  const content = rawInput.content ? String(rawInput.content).trim() :
+    (rawInput.title ? String(rawInput.title).trim() : '');
+  const clarify = _normalizeClarifyFields(rawInput);
+  return {
+    content: content,
+    capture_mode: rawInput.capture_mode ? String(rawInput.capture_mode).trim() : 'text',
+    source: rawInput.source ? String(rawInput.source).trim() : 'mobile_capture',
+    notes: rawInput.notes ? String(rawInput.notes).trim() : '',
+    classification: clarify.classification,
+    business_loop: clarify.business_loop,
+    next_action: clarify.next_action,
+    urgency: clarify.urgency,
+    effort: clarify.effort,
+    leverage_score: clarify.leverage_score,
+    priority_label: clarify.priority_label,
+    stale_after: clarify.stale_after,
+    promoted_to: clarify.promoted_to,
+    last_reviewed_at: clarify.last_reviewed_at
+  };
+}
+
+function _normalizeClarifyFields(input) {
+  const safe = input || {};
+  const classification = CLARIFY_CLASSIFICATIONS.indexOf(String(safe.classification || '').trim()) >= 0
+    ? String(safe.classification).trim()
+    : 'Action'; // Preserve legacy behavior by defaulting captures to actionable.
+  const businessLoop = CLARIFY_BUSINESS_LOOPS.indexOf(String(safe.business_loop || '').trim()) >= 0
+    ? String(safe.business_loop).trim()
+    : 'Founder';
+  const nextAction = safe.next_action ? String(safe.next_action).trim() : '';
+  const urgency = _normalizeScoreValue(safe.urgency, 3);
+  const effort = _normalizeScoreValue(safe.effort, 3);
+
+  const hasExplicitScore = safe.leverage_score !== undefined && safe.leverage_score !== null && safe.leverage_score !== '';
+  const leverageScore = hasExplicitScore ? Number(safe.leverage_score) : _computeLeverageScore(safe);
+  const priorityLabel = safe.priority_label
+    ? String(safe.priority_label).trim()
+    : _labelFromLeverageScore(leverageScore);
+  const staleAfter = safe.stale_after ? safe.stale_after : '';
+  const promotedTo = safe.promoted_to ? String(safe.promoted_to).trim() : '';
+  const lastReviewedAt = safe.last_reviewed_at ? safe.last_reviewed_at : new Date();
+
+  return {
+    classification: classification,
+    business_loop: businessLoop,
+    next_action: nextAction,
+    urgency: urgency,
+    effort: effort,
+    leverage_score: leverageScore,
+    priority_label: priorityLabel,
+    stale_after: staleAfter,
+    promoted_to: promotedTo,
+    last_reviewed_at: lastReviewedAt
+  };
+}
+
+function _normalizeScoreValue(value, fallback) {
+  const num = Number(value);
+  if (!isNaN(num) && num >= 1 && num <= 5) {
+    return Math.round(num);
+  }
+  return fallback;
+}
+
+function _computeLeverageScore(input) {
+  const safe = input || {};
+  const revenue = _normalizeScoreValue(safe.revenue, 3);
+  const validation = _normalizeScoreValue(safe.validation, 3);
+  const learning = _normalizeScoreValue(safe.learning, 3);
+  const strategic = _normalizeScoreValue(safe.strategic, 3);
+  const urgency = _normalizeScoreValue(safe.urgency, 3);
+  const effort = _normalizeScoreValue(safe.effort, 3);
+  return revenue + validation + learning + strategic + urgency - effort;
+}
+
+function _labelFromLeverageScore(score) {
+  const n = Number(score);
+  if (isNaN(n)) {
+    return 'Schedule';
+  }
+  if (n >= 14) return 'Do now';
+  if (n >= 10) return 'Schedule';
+  if (n >= 7) return 'Convert to experiment';
+  if (n >= 5) return 'Park';
+  return 'Archive';
+}
+
+function _canPromoteToExecutionTask(clarify) {
+  const c = clarify || {};
+  const isAction = c.classification === 'Action';
+  const hasNextAction = !!(c.next_action && String(c.next_action).trim());
+  const notArchiveLoop = c.business_loop !== 'Archive';
+  return { allowed: isAction && hasNextAction && notArchiveLoop };
+}
+
+// Public helper for callers that want explicit scoring.
+function calculateLeveragePriority(input) {
+  const score = _computeLeverageScore(input || {});
+  return {
+    leverage_score: score,
+    priority_label: _labelFromLeverageScore(score)
+  };
 }
 
 // ================== HELPERS ==================

@@ -22,6 +22,7 @@
 // ================== TAB NAMES ==================
 const SURFACEB_DAILY_TAB_SURFACE_A = 'SURFACE_A';
 const SURFACEB_DAILY_TAB_DERIVED = 'DERIVED_SIGNALS';
+const SURFACEB_DAILY_TAB_WORKSPACE_HANDOFF = 'WORKSPACE_DAILY_HANDOFF';
 
 // ================== ENTRY POINT ==================
 function runSurfaceBDailyOnce() {
@@ -43,6 +44,409 @@ function runSurfaceBDailyOnce() {
   _writeDailyVoiceBriefToDoc(dailyText);
 
   Logger.log('--- SURFACE B DAILY BRIEF END ---');
+}
+
+// ================== WORKSPACE HANDOFF (FILTERED) ==================
+// Legacy-safe: this does not change Personal OS daily composition.
+// It provides a separate business-only payload for ScanScam Workspace.
+function runWorkspaceDailyHandoffOnce() {
+  const payload = buildWorkspaceDailyHandoffPayload();
+  _writeWorkspaceDailyHandoff(payload);
+  return payload;
+}
+
+function buildWorkspaceDailyHandoffPayload() {
+  const now = new Date();
+  const surfaceA = _readTodaySurfaceA();
+  const derivedSignals = _readActiveDerivedSignals();
+  const decidedItems = _readConfirmedSpeakable();
+  const openTasks = typeof listOpenTasks === 'function' ? listOpenTasks() : [];
+
+  const businessLoops = new Set(['Public', 'MSP', 'Product', 'Intelligence']);
+  const businessActions = [];
+  const pipelineAttention = [];
+  const productOrIntelligenceItems = [];
+  const founderConstraints = _extractFounderConstraints(surfaceA);
+
+  for (const task of openTasks) {
+    const businessLoop = String(task.business_loop || '').trim();
+    const classification = String(task.classification || '').trim();
+    const nextAction = String(task.next_action || '').trim();
+    const content = String(task.content || '').trim();
+    const priorityLabel = String(task.priority_label || '').trim();
+    const leverageScore = Number(task.leverage_score || 0);
+
+    const isBusinessLoop = businessLoops.has(businessLoop);
+    const isBusinessAction = classification === 'Action' && isBusinessLoop && nextAction;
+    if (isBusinessAction) {
+      businessActions.push({
+        task_id: task.task_id || '',
+        business_loop: businessLoop,
+        next_action: nextAction,
+        priority_label: priorityLabel || 'Schedule',
+        leverage_score: isNaN(leverageScore) ? 0 : leverageScore
+      });
+    }
+
+    if (classification === 'Public Pipeline' || classification === 'MSP Pipeline') {
+      if (isBusinessLoop || !businessLoop) {
+        pipelineAttention.push({
+          source: 'task',
+          business_loop: businessLoop || (classification === 'MSP Pipeline' ? 'MSP' : 'Public'),
+          item: nextAction || content
+        });
+      }
+    }
+
+    if (classification === 'Product & Intelligence' || businessLoop === 'Product' || businessLoop === 'Intelligence') {
+      productOrIntelligenceItems.push({
+        source: 'task',
+        business_loop: businessLoop || 'Product',
+        item: nextAction || content
+      });
+    }
+  }
+
+  const businessDecisions = [];
+  const businessExperiments = [];
+  const masterContextCandidates = [];
+
+  for (const item of (decidedItems || [])) {
+    const title = item && item.title ? String(item.title).trim() : '';
+    if (!title) {
+      continue;
+    }
+
+    // Keep payload business-facing and compact.
+    businessDecisions.push({
+      decided_id: item.decided_id || '',
+      title: title
+    });
+
+    if (_looksLikeExperiment(title)) {
+      businessExperiments.push({
+        source: 'decided',
+        title: title
+      });
+    }
+
+    if (_isMasterContextCandidate(title)) {
+      masterContextCandidates.push({
+        source: 'decided',
+        title: title
+      });
+    }
+  }
+
+  for (const signal of (derivedSignals || [])) {
+    if (!signal || !signal.pattern_key) {
+      continue;
+    }
+    if (_looksBusinessSignal(signal)) {
+      productOrIntelligenceItems.push({
+        source: 'derived',
+        business_loop: 'Intelligence',
+        item: String(signal.pattern_key).trim()
+      });
+    }
+  }
+
+  return {
+    handoff_version: '1.0',
+    generated_at: now.toISOString(),
+    source: 'personal_os',
+    scope: 'workspace_daily',
+    date: _formatIsoDate(now),
+    business_actions: _uniqueObjectsByKey(businessActions, function (x) {
+      return [x.task_id, x.business_loop, x.next_action].join('|');
+    }),
+    business_decisions: _uniqueObjectsByKey(businessDecisions, function (x) {
+      return [x.decided_id, x.title].join('|');
+    }),
+    business_experiments: _uniqueObjectsByKey(businessExperiments, function (x) {
+      return [x.source, x.title].join('|');
+    }),
+    pipeline_attention: _uniqueObjectsByKey(pipelineAttention, function (x) {
+      return [x.source, x.business_loop, x.item].join('|');
+    }),
+    product_or_intelligence_items: _uniqueObjectsByKey(productOrIntelligenceItems, function (x) {
+      return [x.source, x.business_loop, x.item].join('|');
+    }),
+    master_context_candidates: _uniqueObjectsByKey(masterContextCandidates, function (x) {
+      return [x.source, x.title].join('|');
+    }),
+    founder_constraints: founderConstraints
+  };
+}
+
+function _formatIsoDate(dateValue) {
+  const d = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  if (isNaN(d.getTime())) {
+    return '';
+  }
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function _extractFounderConstraints(surfaceA) {
+  const constraints = [];
+  if (!surfaceA) {
+    return constraints;
+  }
+  const text = [
+    String(surfaceA.attention || '').trim(),
+    String(surfaceA.context || '').trim(),
+    String(surfaceA.framing || '').trim(),
+    String(surfaceA.reflection || '').trim()
+  ].join(' ');
+
+  if (!text) {
+    return constraints;
+  }
+
+  const lower = text.toLowerCase();
+  if (/\b(low energy|tired|fatigue|exhausted|drained)\b/.test(lower)) {
+    constraints.push('Low energy capacity today.');
+  }
+  if (/\b(limited time|time constraint|short day|few hours|timeboxed)\b/.test(lower)) {
+    constraints.push('Limited execution time today.');
+  }
+  if (/\b(family|child|kids|school|caregiving|appointment)\b/.test(lower)) {
+    constraints.push('Family obligation constrains schedule.');
+  }
+  if (/\b(gym|workout|training|health|medical|recovery)\b/.test(lower)) {
+    constraints.push('Health commitment affects available work blocks.');
+  }
+  return _uniqueStrings(constraints);
+}
+
+function _looksLikeExperiment(text) {
+  const v = String(text || '').toLowerCase();
+  return /\b(experiment|test|hypothesis|pilot|trial|validate|validation)\b/.test(v);
+}
+
+function _isMasterContextCandidate(text) {
+  const v = String(text || '').toLowerCase();
+  return /\b(phase|strategy|priority|positioning|pipeline|principle|operating rule|open question|experiment)\b/.test(v);
+}
+
+function _looksBusinessSignal(signal) {
+  const key = String(signal.pattern_key || '').toLowerCase();
+  const field = String(signal.field || '').toLowerCase();
+  return /\b(scan|signal|pattern|report|msp|lead|outreach|pilot|usage|product|bug|metric|brief|trust|paid)\b/.test(key + ' ' + field);
+}
+
+function _uniqueStrings(items) {
+  const seen = new Set();
+  const result = [];
+  for (const item of (items || [])) {
+    const key = String(item || '').trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(key);
+  }
+  return result;
+}
+
+function _uniqueObjectsByKey(items, keyFn) {
+  const seen = new Set();
+  const result = [];
+  for (const item of (items || [])) {
+    const key = keyFn(item);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+function _writeWorkspaceDailyHandoff(payload) {
+  const sheet = _getOrCreateSheet(SURFACEB_DAILY_TAB_WORKSPACE_HANDOFF);
+  sheet.clearContents();
+
+  const rows = [
+    [new Date()],
+    ['workspace_handoff_daily'],
+    [JSON.stringify(payload, null, 2)]
+  ];
+  sheet.getRange(1, 1, rows.length, 1).setValues(rows);
+}
+
+// ================== WORKSPACE CONSUMER CONTRACT ==================
+// Contract boundary notes:
+// - Personal OS remains the full-life capture layer (personal + business context).
+// - Workspace handoff is filtered business context only.
+// - Reader/validator below provide a deterministic ingestion boundary for future
+//   ScanScam Workspace consumers without changing legacy daily/weekly systems.
+function _createEmptyWorkspaceDailyHandoffTemplate(now) {
+  const baseDate = now instanceof Date ? now : new Date();
+  return {
+    handoff_version: '1.0',
+    generated_at: baseDate.toISOString(),
+    source: 'personal_os',
+    scope: 'workspace_daily',
+    date: _formatIsoDate(baseDate),
+    business_actions: [],
+    business_decisions: [],
+    business_experiments: [],
+    pipeline_attention: [],
+    product_or_intelligence_items: [],
+    master_context_candidates: [],
+    founder_constraints: []
+  };
+}
+
+function _isObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function _asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function validateWorkspaceDailyHandoffPayload(payload) {
+  const warnings = [];
+  const normalized = _createEmptyWorkspaceDailyHandoffTemplate(new Date());
+  const input = _isObject(payload) ? payload : {};
+
+  if (!_isObject(payload)) {
+    warnings.push('Payload was missing or malformed; default template used.');
+  }
+
+  // Metadata normalization (legacy-safe and deterministic).
+  if (input.handoff_version === '1.0') {
+    normalized.handoff_version = input.handoff_version;
+  } else if (input.handoff_version) {
+    warnings.push('Unsupported handoff_version found; defaulted to 1.0.');
+  } else {
+    warnings.push('Missing handoff_version; defaulted to 1.0.');
+  }
+
+  if (input.generated_at) {
+    const generatedAt = new Date(input.generated_at);
+    if (!isNaN(generatedAt.getTime())) {
+      normalized.generated_at = generatedAt.toISOString();
+    } else {
+      warnings.push('Invalid generated_at; default timestamp used.');
+    }
+  } else {
+    warnings.push('Missing generated_at; default timestamp used.');
+  }
+
+  if (input.source === 'personal_os') {
+    normalized.source = 'personal_os';
+  } else {
+    warnings.push('Invalid source; expected "personal_os". Default applied.');
+  }
+
+  if (input.scope === 'workspace_daily') {
+    normalized.scope = 'workspace_daily';
+  } else {
+    warnings.push('Invalid scope; expected "workspace_daily". Default applied.');
+  }
+
+  if (input.date && /^\d{4}-\d{2}-\d{2}$/.test(String(input.date))) {
+    normalized.date = String(input.date);
+  } else {
+    warnings.push('Missing or invalid date; default ISO date applied.');
+  }
+
+  const requiredSections = [
+    'business_actions',
+    'business_decisions',
+    'business_experiments',
+    'pipeline_attention',
+    'product_or_intelligence_items',
+    'master_context_candidates',
+    'founder_constraints'
+  ];
+
+  for (const section of requiredSections) {
+    if (!Array.isArray(input[section])) {
+      if (input[section] !== undefined) {
+        warnings.push('Section "' + section + '" was not an array; normalized to empty array.');
+      } else {
+        warnings.push('Missing section "' + section + '"; normalized to empty array.');
+      }
+      normalized[section] = [];
+    } else {
+      normalized[section] = _asArray(input[section]);
+    }
+  }
+
+  return {
+    payload: normalized,
+    warnings: warnings
+  };
+}
+
+function readLatestWorkspaceDailyHandoff() {
+  const warnings = [];
+  const sheet = _getSheet(SURFACEB_DAILY_TAB_WORKSPACE_HANDOFF);
+
+  if (!sheet) {
+    warnings.push('WORKSPACE_DAILY_HANDOFF sheet not found; returning empty normalized payload.');
+    return {
+      ok: false,
+      payload: _createEmptyWorkspaceDailyHandoffTemplate(new Date()),
+      warnings: warnings
+    };
+  }
+
+  const data = sheet.getDataRange().getValues();
+  if (!data || data.length === 0) {
+    warnings.push('WORKSPACE_DAILY_HANDOFF is empty; returning empty normalized payload.');
+    return {
+      ok: false,
+      payload: _createEmptyWorkspaceDailyHandoffTemplate(new Date()),
+      warnings: warnings
+    };
+  }
+
+  // Legacy-safe: writer currently stores JSON payload in row 3 col 1, but we read
+  // the latest non-empty row so future storage tweaks remain compatible.
+  let rawPayload = '';
+  for (let i = data.length - 1; i >= 0; i--) {
+    const value = data[i][0];
+    if (value !== null && value !== undefined && String(value).trim()) {
+      rawPayload = String(value);
+      break;
+    }
+  }
+
+  if (!rawPayload) {
+    warnings.push('No payload row found in WORKSPACE_DAILY_HANDOFF; returning empty normalized payload.');
+    return {
+      ok: false,
+      payload: _createEmptyWorkspaceDailyHandoffTemplate(new Date()),
+      warnings: warnings
+    };
+  }
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(rawPayload);
+  } catch (e) {
+    warnings.push('Payload JSON parse failed; returning empty normalized payload.');
+    return {
+      ok: false,
+      payload: _createEmptyWorkspaceDailyHandoffTemplate(new Date()),
+      warnings: warnings
+    };
+  }
+
+  const validated = validateWorkspaceDailyHandoffPayload(parsed);
+  return {
+    ok: warnings.length === 0 && validated.warnings.length === 0,
+    payload: validated.payload,
+    warnings: warnings.concat(validated.warnings)
+  };
 }
 
 // ================== READ SOURCES ==================
@@ -202,21 +606,25 @@ function _formatDateHeader(dateValue, language) {
 function _getSectionHeaders(language) {
   if (language === 'fr') {
     return {
-      operationalOrientation: 'Orientation Opérationnelle',
-      attentionLoad: 'Attention et Charge',
-      situationalContext: 'Contexte Situationnel',
-      observations: 'Observations',
-      operationalActions: 'Actions Opérationnelles en Attente',
+      highestLeverageAction: 'Action à plus fort levier (Aujourd\'hui)',
+      secondaryActions: 'Actions secondaires (maximum 2)',
+      decisionNeeded: 'Décision requise',
+      pipelineAttention: 'Pipeline nécessitant attention',
+      ignoreToday: 'À ignorer aujourd\'hui',
+      founderInsight: 'Insight fondateur',
+      notesNotTasks: 'Notes à ne pas convertir en tâches',
       closingNote: 'Note de Clôture'
     };
   }
   
   return {
-    operationalOrientation: 'Operational Orientation',
-    attentionLoad: 'Attention & Load',
-    situationalContext: 'Situational Context',
-    observations: 'Observations',
-    operationalActions: 'Operational Actions Outstanding',
+    highestLeverageAction: 'Highest-Leverage Action (Today)',
+    secondaryActions: 'Secondary Actions (Maximum 2)',
+    decisionNeeded: 'Decision Needed',
+    pipelineAttention: 'Pipeline Needing Attention',
+    ignoreToday: 'Ignore Today',
+    founderInsight: 'Founder Insight',
+    notesNotTasks: 'Notes That Should Not Become Tasks',
     closingNote: 'Closing Note'
   };
 }
@@ -530,180 +938,64 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
   lines.push(dateHeader);
   lines.push('');
 
-  // Operational Orientation
-  // Tone: Calm briefing tone. One light remark allowed (understatement, raised eyebrow energy).
-  if (surfaceA) {
-    const orientationText = surfaceA.orientation ? String(surfaceA.orientation).trim() : '';
-    const framingText = surfaceA.framing ? String(surfaceA.framing).trim() : '';
-    
-    if (orientationText || framingText) {
-      const combined = [orientationText, framingText].filter(Boolean).join(' ');
-      const sentences = _extractCompleteSentences(combined);
-      const rewritten = _rewriteWithAuthority(sentences, 2, language);
-      
-      if (rewritten && rewritten.trim()) {
-        lines.push(headers.operationalOrientation);
-        lines.push('');
-        lines.push(rewritten);
-        lines.push('');
-      }
-    }
-  }
+  const prioritizedTasks = _selectExecutionFocusTasks(openTasks || []);
+  const highest = prioritizedTasks.length > 0 ? prioritizedTasks[0] : null;
+  const secondary = prioritizedTasks.slice(1, 3);
 
-  // Attention & Load
-  // Tone: Slight irony allowed if pressure is evident. No jokes about exhaustion or failure.
-  if (surfaceA) {
-    const attentionText = surfaceA.attention ? String(surfaceA.attention).trim() : '';
-    if (attentionText) {
-      const sentences = _extractCompleteSentences(attentionText);
-      const rewritten = _rewriteWithAuthority(sentences, 1, language);
-      
-      if (rewritten && rewritten.trim()) {
-        lines.push(headers.attentionLoad);
-        lines.push('');
-        lines.push(rewritten);
-        lines.push('');
-      }
-    }
+  lines.push(headers.highestLeverageAction);
+  lines.push('');
+  if (highest) {
+    lines.push('— ' + _cleanTaskContent(highest.next_action || highest.content));
+  } else {
+    lines.push(language === 'fr' ? '— Aucune action qualifiée.' : '— No qualified action.');
   }
+  lines.push('');
 
-  // Situational Context
-  // Tone: Strictly factual. Humor optional, very light.
-  if (surfaceA) {
-    const contextText = surfaceA.context ? String(surfaceA.context).trim() : '';
-    if (contextText) {
-      const sentences = _extractCompleteSentences(contextText);
-      const rewritten = _rewriteWithAuthority(sentences, 2, language);
-      
-      if (rewritten && rewritten.trim()) {
-        lines.push(headers.situationalContext);
-        lines.push('');
-        lines.push(rewritten);
-        lines.push('');
-      }
+  lines.push(headers.secondaryActions);
+  lines.push('');
+  if (secondary.length > 0) {
+    for (const task of secondary) {
+      lines.push('— ' + _cleanTaskContent(task.next_action || task.content));
     }
+  } else {
+    lines.push(language === 'fr' ? '— Aucune.' : '— None.');
   }
+  lines.push('');
 
-  // Observations
-  // Tone: This is where Money-Penny lives most naturally. Wry phrasing encouraged, but still factual.
-  // Optional subtle wit allowed here (maximum 1 line).
-  if (surfaceA) {
-    const reflectionText = surfaceA.reflection ? String(surfaceA.reflection).trim() : '';
-    const hasReflection = reflectionText && _extractCompleteSentences(reflectionText).length > 0;
-    
-    // Always include Observations section if there's any content or context
-    const hasAnyContent = hasReflection || (surfaceA.orientation || surfaceA.attention || surfaceA.context);
-    
-    if (hasAnyContent) {
-      lines.push(headers.observations);
-      lines.push('');
-      
-      if (hasReflection) {
-        const sentences = _extractCompleteSentences(reflectionText);
-        const rewritten = _rewriteWithAuthority(sentences, 1, language);
-        if (rewritten && rewritten.trim()) {
-          lines.push(rewritten);
-        }
-      }
-      
-      // Add subtle wit (dry, understated, observational)
-      // Only if we have enough context to make it meaningful
-      // Maximum 1 witty line per brief - use in Observations OR Closing Note, not both
-      if (hasAnyContent && !hasReflection) {
-        // If no reflection content, use wit as the observation
-        const wit = _addSubtleWit(surfaceA, openTasks, language, 'observations');
-        if (wit) {
-          lines.push(wit);
-        }
-      }
-      
-      lines.push('');
-    }
-  }
+  lines.push(headers.decisionNeeded);
+  lines.push('');
+  const decisionLine = _selectDecisionNeeded(decidedItems || [], surfaceA, language);
+  lines.push('— ' + decisionLine);
+  lines.push('');
 
-  // Operational Actions Outstanding
-  if (openTasks && openTasks.length > 0) {
-    const grouped = _groupTasksByType(openTasks);
-    const hasAnyTasks = grouped.domestic.length > 0 || grouped.operational.length > 0 || 
-                        grouped.system.length > 0 || grouped.other.length > 0;
-    
-    if (hasAnyTasks) {
-      lines.push(headers.operationalActions);
-      lines.push('');
-      
-      // Remove duplicates by content
-      const seenContent = new Set();
-      const uniqueTasks = [];
-      for (const task of openTasks) {
-        const content = task.content ? String(task.content).trim().toLowerCase() : '';
-        if (content && !seenContent.has(content)) {
-          seenContent.add(content);
-          uniqueTasks.push(task);
-        }
-      }
-      
-      // Group and format
-      const uniqueGrouped = _groupTasksByType(uniqueTasks);
-      
-      // Operational Actions Outstanding
-      // Tone: Clear, explicit, no jokes inside task text. A single dry remark may appear before or after the list.
-      if (uniqueGrouped.domestic.length > 0) {
-        const remark = language === 'fr' 
-          ? 'Maintenance domestique en attente.'
-          : 'Domestic maintenance remains pending.';
-        lines.push(remark);
-        for (const task of uniqueGrouped.domestic) {
-          const cleaned = _cleanTaskContent(task.content);
-          if (cleaned) {
-            lines.push('— ' + cleaned);
-          }
-        }
-        lines.push('');
-      }
-      
-      if (uniqueGrouped.operational.length > 0) {
-        if (uniqueGrouped.domestic.length === 0) {
-          const remark = language === 'fr'
-            ? 'Éléments opérationnels nécessitant attention.'
-            : 'Operational items require attention.';
-          lines.push(remark);
-        }
-        for (const task of uniqueGrouped.operational) {
-          const cleaned = _cleanTaskContent(task.content);
-          if (cleaned) {
-            lines.push('— ' + cleaned);
-          }
-        }
-        lines.push('');
-      }
-      
-      if (uniqueGrouped.system.length > 0) {
-        if (uniqueGrouped.domestic.length === 0 && uniqueGrouped.operational.length === 0) {
-          const remark = language === 'fr'
-            ? 'Maintenance système en attente.'
-            : 'System maintenance pending.';
-          lines.push(remark);
-        }
-        for (const task of uniqueGrouped.system) {
-          const cleaned = _cleanTaskContent(task.content);
-          if (cleaned) {
-            lines.push('— ' + cleaned);
-          }
-        }
-        lines.push('');
-      }
-      
-      if (uniqueGrouped.other.length > 0) {
-        for (const task of uniqueGrouped.other) {
-          const cleaned = _cleanTaskContent(task.content);
-          if (cleaned) {
-            lines.push('— ' + cleaned);
-          }
-        }
-        lines.push('');
-      }
+  lines.push(headers.pipelineAttention);
+  lines.push('');
+  lines.push('— ' + _selectPipelineAttention(prioritizedTasks, derivedSignals || [], surfaceA, language));
+  lines.push('');
+
+  lines.push(headers.ignoreToday);
+  lines.push('');
+  lines.push('— ' + _selectIgnoreToday(prioritizedTasks, language));
+  lines.push('');
+
+  lines.push(headers.founderInsight);
+  lines.push('');
+  lines.push('— ' + _selectFounderInsight(surfaceA, openTasks || [], language));
+  lines.push('');
+
+  lines.push(headers.notesNotTasks);
+  lines.push('');
+  const nonTaskNotes = _extractNonTaskNotes(surfaceA, language);
+  if (nonTaskNotes.length > 0) {
+    for (const note of nonTaskNotes) {
+      lines.push('— ' + note);
     }
+  } else {
+    lines.push(language === 'fr'
+      ? '— Aucune note à préserver hors exécution.'
+      : '— No notes explicitly preserved outside execution.');
   }
+  lines.push('');
 
   // Closing Note
   // Tone: One sentence. Can be witty. Must still be true. No reassurance.
@@ -715,6 +1007,126 @@ function _composeDailyBrief(surfaceA, derivedSignals, decidedItems, openTasks) {
   lines.push(closingNote);
 
   return lines.join('\n');
+}
+
+function _selectExecutionFocusTasks(openTasks) {
+  if (!openTasks || openTasks.length === 0) {
+    return [];
+  }
+  const actionable = openTasks.filter(task => {
+    const classification = String(task.classification || 'Action').trim();
+    const businessLoop = String(task.business_loop || 'Founder').trim();
+    const nextAction = String(task.next_action || '').trim();
+    return classification === 'Action' && businessLoop !== 'Archive' && !!nextAction;
+  });
+
+  const withScore = actionable.map(task => {
+    const score = Number(task.leverage_score);
+    const normalizedScore = isNaN(score) ? 0 : score;
+    const urgency = Number(task.urgency);
+    const normalizedUrgency = isNaN(urgency) ? 3 : urgency;
+    const overdueBoost = task.overdue ? 1 : 0;
+    return {
+      task: task,
+      score: normalizedScore + normalizedUrgency + overdueBoost
+    };
+  });
+
+  withScore.sort((a, b) => b.score - a.score);
+  return withScore.map(x => x.task);
+}
+
+function _selectDecisionNeeded(decidedItems, surfaceA, language) {
+  if (decidedItems && decidedItems.length > 0) {
+    const first = decidedItems[0];
+    if (first && first.title) {
+      return _makeDry(String(first.title).trim());
+    }
+  }
+  const framing = surfaceA && surfaceA.framing ? _extractCompleteSentences(String(surfaceA.framing).trim()) : [];
+  if (framing.length > 0) {
+    return _makeDry(framing[0]);
+  }
+  return language === 'fr' ? 'Aucune décision explicite capturée.' : 'No explicit decision captured.';
+}
+
+function _selectPipelineAttention(tasks, derivedSignals, surfaceA, language) {
+  const loops = {};
+  for (const task of tasks || []) {
+    const loop = String(task.business_loop || 'Founder').trim();
+    loops[loop] = (loops[loop] || 0) + 1;
+  }
+  let bestLoop = '';
+  let bestCount = -1;
+  for (const key in loops) {
+    if (loops[key] > bestCount) {
+      bestLoop = key;
+      bestCount = loops[key];
+    }
+  }
+  if (bestLoop) {
+    return language === 'fr'
+      ? ('Pipeline dominant aujourd\'hui: ' + bestLoop + '.')
+      : ('Dominant pipeline today: ' + bestLoop + '.');
+  }
+  if (derivedSignals && derivedSignals.length > 0) {
+    return language === 'fr'
+      ? 'Signaux actifs détectés; prioriser la boucle avec validation immédiate.'
+      : 'Active signals detected; prioritize the loop with immediate validation.';
+  }
+  return language === 'fr'
+    ? 'Aucune pression pipeline explicite.'
+    : 'No explicit pipeline pressure detected.';
+}
+
+function _selectIgnoreToday(tasks, language) {
+  if (!tasks || tasks.length <= 3) {
+    return language === 'fr' ? 'Nouveaux inputs non classifiés.' : 'New unclassified inputs.';
+  }
+  const tail = tasks[tasks.length - 1];
+  const text = _cleanTaskContent(tail.content || '');
+  return text || (language === 'fr' ? 'Backlog faible levier.' : 'Low-leverage backlog.');
+}
+
+function _selectFounderInsight(surfaceA, openTasks, language) {
+  const reflectionText = surfaceA && surfaceA.reflection ? String(surfaceA.reflection).trim() : '';
+  const reflectionSentences = _extractCompleteSentences(reflectionText);
+  if (reflectionSentences.length > 0) {
+    return _makeDry(reflectionSentences[0]);
+  }
+  const wit = _addSubtleWit(surfaceA, openTasks, language, 'observations');
+  if (wit) {
+    return wit;
+  }
+  return language === 'fr' ? 'Signal limité; exécution prioritaire.' : 'Limited signal; execution is the priority.';
+}
+
+function _extractNonTaskNotes(surfaceA, language) {
+  const notes = [];
+  if (!surfaceA) {
+    return notes;
+  }
+  const candidates = [];
+  if (surfaceA.attention) {
+    candidates.push.apply(candidates, _extractCompleteSentences(String(surfaceA.attention).trim()));
+  }
+  if (surfaceA.reflection) {
+    candidates.push.apply(candidates, _extractCompleteSentences(String(surfaceA.reflection).trim()));
+  }
+  const unique = _removeRepetition(candidates).slice(0, 2);
+  for (const sentence of unique) {
+    const normalized = String(sentence || '').toLowerCase();
+    // Explicitly preserve reflective/emotional material as context, not execution.
+    if (/\b(feel|felt|emotion|energy|focus|stress|overwhelm|anxious|tired|fatigue|pression|énergie|fatigue|stress)\b/.test(normalized)) {
+      notes.push(_makeDry(sentence));
+    }
+  }
+  if (notes.length === 0 && unique.length > 0) {
+    notes.push(language === 'fr'
+      ? 'Conserver la réflexion comme contexte, sans conversion automatique en tâche.'
+      : 'Keep reflection as context without automatic task conversion.');
+  }
+  return notes;
 }
 
 // ================== WRITE OUTPUT ==================

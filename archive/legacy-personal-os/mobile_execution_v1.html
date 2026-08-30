@@ -348,7 +348,7 @@
     let currentTaskId = null;
 
     function goToCapture() {
-      window.top.location.href = "https://script.google.com/macros/s/AKfycbzDnoBDowi3U_H3olPqPuLtO-bJaLoYrsjp4ZONdO9_6zim1ajZfQzYigDiY-EYTTba/exec";
+      window.top.location.href = API_URL;
     }
 
     function showToast(message) {
@@ -373,7 +373,6 @@
 
     async function loadTasks() {
       try {
-        await callApi("auto_promote_inbox", {});
         const data = await callApi("list_open_tasks", {});
         const tasks = Array.isArray(data) ? data : [];
         renderTasks(tasks);

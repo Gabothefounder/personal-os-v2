@@ -69,6 +69,8 @@ function onOpen() {
   ui.createMenu('Personal OS')
     .addItem('Add Person', 'openPeopleSidebar')
     .addItem('Add Interaction', 'openInteractionSidebar')
+    .addSeparator()
+    .addItem('Process Lucid JSON', 'processLucidJson')
     .addToUi();
 }
 

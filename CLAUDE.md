@@ -43,4 +43,14 @@ BRAINSTORM → STRUCTURE → RESEARCH → CHALLENGE → EXPERIMENT → PRODUCE �
 21. Never rewrite the core constitution or Gabriel’s established values merely because one decision creates a trade-off.
 22. When unsure where something belongs, capture first rather than forcing Gabriel to classify it.
 
+## Opportunity analysis
+
+Route through `wisdom/syntheses/OPPORTUNITY_ENGINE.md`. Use the smallest relevant set of lenses (normally 3–5). Never load the entire wisdom library by default.
+
+Source material (`wisdom/people/`, `wisdom/books/`) is distinct from derived principles (`wisdom/lenses/`). Do not treat unpopulated source notes as a lens.
+
+Preserve disagreements between thinkers; do not average them away.
+
+When an opportunity’s outcome is known, record it on the analysis and update `wisdom/lenses/GABRIEL.md` only from that outcome or an explicit preference — not from AI inference.
+
 Always read `NOW.md` first when beginning substantive work.

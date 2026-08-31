@@ -14,6 +14,16 @@ Businesses may pay for independent research that reduces uncertainty about an un
 
 This is a hypothesis, not a validated business.
 
+## Evidence so far (do not overread)
+
+Consumer scanner, Google Ads, priced CTAs ($5 copy / $49 mailto), free report/email gates, a conversation-booking page, and a Family Protect waitlist have been shipped at various times.
+
+**FOUNDER-REPORTED (issue #1):** Ads produced scans without meaningful return; paid-option tests produced no purchases; free offers and conversation booking did not show clear pull; PMF is not established for consumer, family, or B2B.
+
+**FACT:** ScanScam has no payment rail in repo, so the $5 test did not actually charge. Sheet/Ads/signup counts were never written into this workspace. See `projects/scanscam/EXPERIMENTS.md`.
+
+The Counterparty Scan below is a **new untested hypothesis**, not a continuation of demonstrated consumer demand.
+
 ## Current experiment
 
 Test a manually delivered "Scan a Company / Counterparty Scan."

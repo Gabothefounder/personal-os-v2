@@ -8,6 +8,7 @@ Epistemic labels used below:
 
 - **FACT** — in commits, files, or PR merge records
 - **FOUNDER-REPORTED** — stated by Gabriel in GitHub issue #1 (and restated here without strengthening)
+- **FOUNDER-PROVIDED DATA** — quantitative evidence reconstructed from external reports Gabriel supplied; source files are not committed here
 - **PRODUCT COPY** — claim shown to users; not independently verified from telemetry in this reconstruction
 - **NOT IN REPO** — no counts, sheet exports, or result write-ups in either git history
 
@@ -79,22 +80,22 @@ Source: GitHub issue [#1](https://github.com/Gabothefounder/personal-os-v2/issue
 
 ### EXP-003 — Google Ads acquisition of free scans
 
-- **Date / period:** Tag installed 2026-02-22; UTM/gclid capture 2026-03-08; first-touch attribution persistence 2026-05-11. Campaign dates **NOT IN REPO**.
+- **Date / period:** Tag installed 2026-02-22; UTM/gclid capture 2026-03-08; first-touch attribution persistence 2026-05-11. **FOUNDER-PROVIDED DATA:** campaign ran 2026-04-23 through 2026-05-22.
 - **Hypothesis:** Paid search can acquire people with a live suspicious-message problem who will scan (and, implicitly, return or convert).
 - **Audience / segment:** Consumer search traffic
 - **Offer / CTA:** Same free scanner (EXP-001). Conversion event fired on valid result render.
 - **Channel:** Google Ads
 - **What changed:** Global tag `AW-16787240010`; conversion `AW-16787240010/-lHQCNrulP0bEMro48Q-`; anonymous UTM + `gclid` on scans/telemetry; `sessionStorage` first-touch snapshot (`lib/attribution.ts`). Founder Control Daily Pulse has **manual** Ad Spend/Clicks columns; Ads API explicitly out of scope.
-- **Traffic / exposure:** **FOUNDER-REPORTED:** Ads produced scans. Counts, spend, CPA: **NOT IN REPO**.
+- **Traffic / exposure — FOUNDER-PROVIDED DATA:** $592.96 CAD spend; 15,131 impressions; 769 clicks; $0.77 CAD average CPC; 343 Google Ads conversion events; 44.60% recorded conversion rate; $1.73 CAD cost per conversion event; 2,971 unique search terms captured.
 - **Observed behavior:** **FOUNDER-REPORTED:** users did not come back in a meaningful way.
-- **Revenue / conversion:** Ads conversion = scan completed, not purchase.
-- **User conversations / qualitative evidence:** **NOT IN REPO**
-- **Result:** **NEGATIVE** on retention/return (**FOUNDER-REPORTED**). Acquisition-of-scans may have “worked” as a pixel event; that is not a business result.
-- **What this actually falsified:** That Google Ads → free scan is, by itself, a path to retained users (**FOUNDER-REPORTED**, not a sheet-backed funnel).
-- **What it did NOT falsify:** Ads for a *different* offer (paid brief, family, B2B); organic retention; whether the problem is real.
-- **Learning:** Buying scans is not buying customers. Attribution plumbing was built; outcomes were not written back into the operating workspace.
-- **Next implication:** Do not scale the same Ads → free scanner loop hoping retention appears. If Ads are reused, the success metric cannot be `scan_completed`.
-- **Source:** `scanscam` `8d82b33`, `0d9fdbc`, `b540c4f`, `d0091b3`; `app/layout.tsx`, `lib/gtag.ts`, `founder-control/SETUP.md`; issue #1
+- **Revenue / conversion:** The 343 are **Google Ads conversion events** tied to the scanner/result flow (the repo fires the conversion on valid result render). They are **not** unique customers, retained users, leads, purchases, or revenue. Interpret them as acquisition/action events, not PMF.
+- **User conversations / qualitative evidence:** Search-term data provides observed search intent, **not interviews**. Representative queries include `is this a scam`, `is this link safe`, `is this number a scammer canada`, `does cra send text messages`, `jula jewelry scam`, `is temu a scam`, and `pkginfo ups real or fake`.
+- **Result:** **POSITIVE** only for the narrow claim that paid search can generate scanner/result actions. **NEGATIVE** on meaningful return (**FOUNDER-REPORTED**). **INCONCLUSIVE** on willingness to pay and PMF.
+- **What this actually falsified:** That Google Ads → free scan is, by itself, a path to retained users (**FOUNDER-REPORTED**). It also shows that a high Ads conversion-event rate is not enough to establish a business.
+- **What it did NOT falsify:** Ads for a *different* offer (paid brief, family, B2B); organic retention; whether the underlying verification problem is real; willingness to pay for a materially different solution.
+- **Learning:** Buying scanner actions is not buying customers. Search demand exists around immediate verification, but downstream value was not established.
+- **Next implication:** Do not scale the same Ads → free scanner loop hoping retention appears. If Ads are reused, the success metric cannot be `scan_completed` or the Ads conversion event alone.
+- **Source:** `scanscam` `8d82b33`, `0d9fdbc`, `b540c4f`, `d0091b3`; `app/layout.tsx`, `lib/gtag.ts`, `founder-control/SETUP.md`; issue #1; founder-provided Gemini reconstruction of uploaded Google Ads `Search keyword report.csv` and `Search terms report.csv`.
 
 ---
 
@@ -293,12 +294,13 @@ Only what is strong enough to act on:
 
 1. **FACT:** ScanScam’s shipped product is a consumer suspicious-message scanner, plus a series of post-scan CTAs and two Aug 2026 landings (conversation, Family Protect).
 2. **FACT:** There is no payment rail in the ScanScam repo. The “$5 report” was copy plus a free survey unlock.
-3. **FOUNDER-REPORTED:** Google Ads created scans without meaningful return.
-4. **FOUNDER-REPORTED:** Paid-option experiments produced no purchases.
-5. **FOUNDER-REPORTED:** Free offers / conversation booking did not show clear pull.
-6. **FOUNDER-REPORTED:** PMF is not established for consumer, family, or B2B.
-7. **FACT:** Counterparty Scan is written as the current 30-day test and has **no recorded prospect evidence** yet.
-8. **FACT:** Outcome data that would make several tests conclusive (Sheets, Ads, signups, bookings) was never committed to the operating workspace.
+3. **FOUNDER-PROVIDED DATA:** The 2026-04-23 to 2026-05-22 Google Ads campaign spent $592.96 CAD for 15,131 impressions, 769 clicks, and 343 recorded Ads conversion events. These events are scanner/result actions, not customers or revenue.
+4. **FOUNDER-REPORTED:** Google Ads created scans without meaningful return.
+5. **FOUNDER-REPORTED:** Paid-option experiments produced no purchases.
+6. **FOUNDER-REPORTED:** Free offers / conversation booking did not show clear pull.
+7. **FOUNDER-REPORTED:** PMF is not established for consumer, family, or B2B.
+8. **FACT:** Counterparty Scan is written as the current 30-day test and has **no recorded prospect evidence** yet.
+9. **FACT:** Outcome data that would make several tests conclusive (Sheets, signups, bookings) was never committed to the operating workspace.
 
 ---
 
@@ -310,7 +312,7 @@ Only what is strong enough to act on:
 - Whether **perceived differentiation** is too low vs ChatGPT / search / bank advice.
 - Whether **AI-wrapper substitution** makes a generic scan unpayworthy even if the problem is real.
 - Whether a **trust problem is valuable** but this product does not capture it.
-- Actual **scan volume, return rate, Ads spend, email opt-ins, waitlist size, calendar bookings, survey WTP distribution** — all **NOT IN REPO**.
+- Actual **unique scan volume, return rate, email opt-ins, waitlist size, calendar bookings, survey WTP distribution** — still not reconciled in this workspace.
 - Whether $5 or $49 would convert **if checkout existed**.
 - Whether Counterparty Scan is a real buying job vs export-development / introductions (see planning memo contradiction).
 
@@ -333,7 +335,7 @@ Do **not** put on this list (not measured, or not yet run): parking-ticket verti
 
 | Gap | Why it matters |
 |---|---|
-| Google Ads spend, clicks, CPA, return visits | Needed to size EXP-003 beyond founder memory |
+| Google Ads unique-user / return-visit reconciliation | Ads action metrics are now recorded, but retention and unique-user behavior are still unresolved |
 | Founder Control / sheet exports | Daily Pulse, research, surveys never copied into git |
 | `payment_completed` never emitted | Cannot reconcile “no purchases” with funnel SQL |
 | User-research response summaries | Gate ran ~2 weeks; answers not in workspace |
@@ -341,7 +343,7 @@ Do **not** put on this list (not measured, or not yet run): parking-ticket verti
 | Family Protect signup count | Waitlist may have data; PMF claim is founder-level |
 | Calendar booking count | Conversation experiment unquantified |
 | Vercel production traffic | Merge ≠ measured visits |
-| Customer language | `CUSTOMER_INTEL.md` had no quotes |
+| Customer interview language | Search terms are now captured, but interview/prospect quotes remain missing |
 | Inbox / call notes for $49 review | Off-platform |
 
 ---

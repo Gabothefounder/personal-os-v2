@@ -28,18 +28,34 @@ These are starting sets, not mandatory casts. Swap lenses when the question is d
 Notes:
 
 - Frontier/Trust → `thesis/TRUST_THESIS.md` when the question is trust, verification, or cooperation under uncertainty. That is a thesis, not a lens file.
+- Agentic business / PMF workflow questions → also read `wisdom/syntheses/AGENTIC_PMF_ENGINE.md`. It is operating doctrine, not evidence that an agent should be built.
 - Taleb, Munger/Buffett, Greenblatt, Ferguson, Talleyrand, Aristotle/Stoic — **not in the library yet**. Do not fabricate those lenses. Name the gap and proceed with what exists.
 - Ferguson’s *The Square and the Tower* lives at `wisdom/books/THE_SQUARE_AND_THE_TOWER.md` (unpopulated).
+
+---
+
+## Existing-project gravity
+
+Before recommending a new project, ask whether the opportunity can be tested through an existing active project, audience, relationship, asset, product, reputation, distribution channel, or data set.
+
+A new project has a **reset cost** in attention, reputation, network, learning, distribution, tooling, and compounding. Do not treat a theoretically higher-scoring greenfield idea as free to enter.
+
+Prefer an adjacent test inside an existing project when it can answer the same important question with materially less reset cost.
+
+Recommend a new project only when the expected advantage clearly exceeds the reset cost or the existing project genuinely blocks the test.
+
+This rule does **not** mean force every opportunity into ScanScam. It means make the cost of abandoning accumulated position explicit.
 
 ---
 
 ## Opportunity flow
 
 1. Capture in `opportunities/INBOX.md`
-2. If it deserves work, move a pointer to `opportunities/ACTIVE.md` (max: treat like projects — few at a time)
-3. Write one analysis in `opportunities/analyses/`
-4. Decision: WATCH / TEST / BUILD / KILL
-5. When the outcome is known: record it in the analysis, archive if done, and update `wisdom/lenses/GABRIEL.md` only from that outcome or an explicit preference
+2. Apply **Existing-project gravity** before creating a new active project
+3. If it deserves work, move a pointer to `opportunities/ACTIVE.md` (max: treat like projects — few at a time)
+4. Write one analysis in `opportunities/analyses/`
+5. Decision: WATCH / TEST / BUILD / KILL
+6. When the outcome is known: record it in the analysis, archive if done, and update `wisdom/lenses/GABRIEL.md` only from that outcome or an explicit preference
 
 Incubator ideas that are not opportunities stay in `incubator/IDEAS.md`.
 
@@ -56,6 +72,7 @@ Every opportunity analysis should contain:
 - relevant lenses selected
 - analysis by lens
 - disagreements between lenses
+- existing-project gravity / reset cost
 - unknown dependencies
 - strongest counterargument
 - falsifiers
